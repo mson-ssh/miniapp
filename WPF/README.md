@@ -52,7 +52,7 @@ Mở `MiniApps.exe` trực tiếp không tự xin quyền Admin, cho phép xem g
 
 Năm file dành cho cùng GitHub Release **v0.2.0** trong `mson-ssh/miniapp`: hai ZIP, hai checksum và một manifest. Bản đầu chỉ hỗ trợ x64; bootstrap báo rõ với x86/ARM64. Script không tự upload/push/release. Gói hiện chưa ký Authenticode; SHA-256 chống sai/hỏng nội dung, không thay thế chữ ký của nhà phát hành.
 
-Sau khi source bootstrap và release assets đã được phát hành:
+Sau khi source bootstrap và release assets đã được phát hành, bootstrap dùng URL release `v0.2.0` cố định để manifest và các gói luôn thuộc cùng một phiên bản:
 
 ```powershell
 irm https://raw.githubusercontent.com/mson-ssh/miniapp/main/WPF/bootstrap.ps1 | iex
