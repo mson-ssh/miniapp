@@ -2,7 +2,7 @@
 
 Máy mới / phiên AI mới: đọc [AGENTS.md](AGENTS.md) và [bộ tài liệu kỹ thuật](docs/README.md) trước khi sửa hoặc chạy dự án. Nên mở `WPF/` làm workspace; trạng thái bàn giao nằm trong [CURRENT-STATE.md](docs/CURRENT-STATE.md).
 
-`v0.3.1` hiện là mã nguồn đang phát triển, chưa phát hành. Lệnh `irm` vẫn tải Release `v0.3.0`; push mã nguồn không cập nhật các gói ZIP đã phát hành. Bản .NET 10 chưa được đồng bộ tính năng Optimize mới.
+`v0.3.1` đã phát hành để thử nghiệm net48 qua `irm`. Gói net48 gồm Optimize dạng thông báo có hoạt ảnh; gói .NET 10 giữ nguyên từng byte từ v0.3.0, không build lại. Chỉ push mã nguồn ở các lần sau sẽ không tự cập nhật ZIP phát hành.
 
 ## Optimize trên .NET Framework 4.8
 
@@ -80,7 +80,7 @@ Mở `MiniApps.exe` trực tiếp không tự xin quyền Admin, cho phép xem g
 
 Năm file dành cho cùng GitHub Release **v0.3.1** trong `mson-ssh/miniapp`: hai ZIP, hai checksum và một manifest. Bản đầu chỉ hỗ trợ x64; bootstrap báo rõ với x86/ARM64. Script không tự upload/push/release. Gói hiện chưa ký Authenticode; SHA-256 chống sai/hỏng nội dung, không thay thế chữ ký của nhà phát hành.
 
-Bootstrap hiện dùng URL release `v0.3.0` cố định để manifest và các gói luôn thuộc cùng một phiên bản đã phát hành:
+Bootstrap hiện dùng URL release `v0.3.1` cố định để manifest và các gói luôn thuộc cùng một phiên bản đã phát hành:
 
 ```powershell
 irm https://raw.githubusercontent.com/mson-ssh/miniapp/main/WPF/bootstrap.ps1 | iex

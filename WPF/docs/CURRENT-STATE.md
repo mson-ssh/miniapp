@@ -2,7 +2,7 @@
 
 ## Phát hành v0.3.1
 
-Đang chuẩn bị phát hành theo yêu cầu thử `irm`: net48 gồm Optimize dạng thông báo có hoạt ảnh, task bridge và tài liệu bàn giao. Gói net10 tái sử dụng nguyên byte từ v0.3.0 (SHA-256 `828341fa007fb89f1d246758eaa9dae93e835b283464c2d5068be785b3e42b17`), không build lại. Các thông tin v0.3.0 bên dưới là lịch sử trước lần phát hành này.
+Đã phát hành v0.3.1 theo yêu cầu thử `irm`: net48 gồm Optimize dạng thông báo có hoạt ảnh, task bridge và tài liệu bàn giao. Source release: `904e372f4115ffb222fd097be5f364d2fee089cb`. ZIP net48: 494015 bytes, SHA-256 `95e02e63907227e0b0f870cca68c9b7be4b31506216e1ed6f03f6b1d7ebdfaf9`. Gói net10 tái sử dụng nguyên byte từ v0.3.0 (SHA-256 `828341fa007fb89f1d246758eaa9dae93e835b283464c2d5068be785b3e42b17`), không build lại. Remote asset size/hash và tải lại ZIP net48 đã xác minh. Bootstrap chuyển sang v0.3.1 sau khi asset tồn tại. Các thông tin v0.3.0 bên dưới là lịch sử trước lần phát hành này.
 
 Cập nhật: 2026-09-06. Đây là snapshot; kiểm tra Git và code khi tiếp tục, không coi thông tin release dưới đây là vĩnh viễn.
 
