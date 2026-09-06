@@ -21,8 +21,24 @@ function Start-MiniApps {
         Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded"
         return
     }
-    $os = [Environment]::OSVersion.Version
-    if ($os.Build -lt 19044 -and -not $Preview) { throw 'MiniApps requires Windows 10 21H2 (build 19044) or later. Windows 11 is supported.' }
+    # Read the installed build; Environment.OSVersion may reflect host compatibility settings.
+    $osView = if ([Environment]::Is64BitOperatingSystem) { [Microsoft.Win32.RegistryView]::Registry64 } else { [Microsoft.Win32.RegistryView]::Registry32 }
+    $osRoot = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, $osView)
+    $osKey = $null
+    try {
+        $osKey = $osRoot.OpenSubKey('SOFTWARE\Microsoft\Windows NT\CurrentVersion')
+        if (-not $osKey) { throw 'Cannot read the installed Windows build.' }
+        $buildText = [string]$osKey.GetValue('CurrentBuildNumber', $osKey.GetValue('CurrentBuild', ''))
+        $displayVersion = [string]$osKey.GetValue('DisplayVersion', '')
+        $windowsBuild = 0
+        if (-not [int]::TryParse($buildText, [ref]$windowsBuild)) { throw "Cannot determine Windows build from '$buildText'." }
+    } finally {
+        if ($osKey) { $osKey.Dispose() }
+        $osRoot.Dispose()
+    }
+    if ($windowsBuild -lt 19044 -and -not $Preview) {
+        throw "Detected Windows $displayVersion (build $windowsBuild). MiniApps currently supports Windows 10 21H2 (build 19044) or later, including Windows 11."
+    }
     # .NET Framework 4.8 is an OS component on the supported Windows builds.
     # Inspect the explicit registry view so a 32-bit bootstrap also detects it.
     $view = if ([Environment]::Is64BitOperatingSystem) { [Microsoft.Win32.RegistryView]::Registry64 } else { [Microsoft.Win32.RegistryView]::Registry32 }
