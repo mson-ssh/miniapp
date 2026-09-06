@@ -18,6 +18,18 @@ function Select-MiniAppsTarget {
     return 'net10'
 }
 
+function ConvertFrom-MiniAppsManifestContent {
+    param([Parameter(Mandatory = $true)]$Content)
+    $json = if ($Content -is [byte[]]) {
+        [Text.Encoding]::UTF8.GetString($Content)
+    } else {
+        [string]$Content
+    }
+    if ([string]::IsNullOrWhiteSpace($json)) { throw 'Release manifest is empty.' }
+    try { return ($json.TrimStart([char]0xFEFF) | ConvertFrom-Json) }
+    catch { throw "Invalid release manifest JSON: $($_.Exception.Message)" }
+}
+
 function Select-MiniAppsAsset {
     param(
         [Parameter(Mandatory = $true)]$Manifest,
@@ -56,11 +68,12 @@ function Start-MiniApps {
         $body = ${function:Start-MiniApps}.ToString()
         $buildTestBody = ${function:Test-MiniAppsWindowsBuild}.ToString()
         $targetBody = ${function:Select-MiniAppsTarget}.ToString()
+        $manifestBody = ${function:ConvertFrom-MiniAppsManifestContent}.ToString()
         $assetBody = ${function:Select-MiniAppsAsset}.ToString()
         $escapedBase = $ReleaseBase.Replace("'", "''")
         $escapedPath = $PackagePath.Replace("'", "''")
         $escapedHash = $ExpectedSha256.Replace("'", "''")
-        $command = "function Test-MiniAppsWindowsBuild { $buildTestBody }; function Select-MiniAppsTarget { $targetBody }; function Select-MiniAppsAsset { $assetBody }; function Start-MiniApps { $body }; Start-MiniApps -ReleaseBase '$escapedBase' -PackagePath '$escapedPath' -ExpectedSha256 '$escapedHash'"
+        $command = "function Test-MiniAppsWindowsBuild { $buildTestBody }; function Select-MiniAppsTarget { $targetBody }; function ConvertFrom-MiniAppsManifestContent { $manifestBody }; function Select-MiniAppsAsset { $assetBody }; function Start-MiniApps { $body }; Start-MiniApps -ReleaseBase '$escapedBase' -PackagePath '$escapedPath' -ExpectedSha256 '$escapedHash'"
         $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
         Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded"
         return
@@ -138,7 +151,10 @@ function Start-MiniApps {
             Copy-Item -LiteralPath $PackagePath -Destination $zip
         } else {
             if ($ReleaseBase -notmatch '^https://github\.com/mson-ssh/miniapp/releases/(latest/download|download/v[a-zA-Z0-9._-]+)$') { throw 'Release URL is not an approved MiniApps GitHub release URL.' }
-            $manifest = Invoke-RestMethod -Uri "$ReleaseBase/manifest-$rid.json" -TimeoutSec 90
+            # GitHub release assets use application/octet-stream. Windows PowerShell 5.1
+            # therefore returns raw bytes/string instead of deserializing JSON.
+            $manifestResponse = Invoke-WebRequest -Uri "$ReleaseBase/manifest-$rid.json" -UseBasicParsing -TimeoutSec 90
+            $manifest = ConvertFrom-MiniAppsManifestContent -Content $manifestResponse.Content
             $asset = Select-MiniAppsAsset -Manifest $manifest -Target $target -Architecture $rid
             $ExpectedSha256 = [string]$asset.sha256
             Write-Host "Downloading MiniApps $target..." -ForegroundColor Cyan

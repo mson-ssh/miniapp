@@ -20,6 +20,15 @@ foreach ($case in $targetCases) {
 }
 Write-Host 'PASS bootstrap target selection: missing/lower => net10; 4.8/higher => net48.'
 
+$manifestJson = '{"schemaVersion":2,"version":"0.2.0","architecture":"win-x64","assets":[]}'
+$fromBytes = ConvertFrom-MiniAppsManifestContent -Content ([Text.Encoding]::UTF8.GetBytes($manifestJson))
+$fromString = ConvertFrom-MiniAppsManifestContent -Content $manifestJson
+if ($fromBytes.schemaVersion -ne 2 -or $fromString.schemaVersion -ne 2) { throw 'Manifest content decoder failed.' }
+$invalidRejected = $false
+try { ConvertFrom-MiniAppsManifestContent -Content '{invalid' | Out-Null } catch { $invalidRejected = $_.Exception.Message -match 'Invalid release manifest JSON' }
+if (-not $invalidRejected) { throw 'Manifest content decoder must reject invalid JSON.' }
+Write-Host 'PASS bootstrap manifest content decoding for PowerShell 5.1 byte/string responses.'
+
 $manifest = [pscustomobject]@{
     schemaVersion = 2
     version = '0.2.0'
