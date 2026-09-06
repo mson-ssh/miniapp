@@ -12,6 +12,35 @@ function Test-MiniAppsWindowsBuild {
     return $true
 }
 
+function Select-MiniAppsTarget {
+    param([Parameter(Mandatory = $true)][int]$FrameworkRelease)
+    if ($FrameworkRelease -ge 528040) { return 'net48' }
+    return 'net10'
+}
+
+function Select-MiniAppsAsset {
+    param(
+        [Parameter(Mandatory = $true)]$Manifest,
+        [Parameter(Mandatory = $true)][ValidateSet('net48','net10')][string]$Target,
+        [Parameter(Mandatory = $true)][ValidateSet('win-x64')][string]$Architecture
+    )
+    if ([int]$Manifest.schemaVersion -ne 2) { throw 'Unsupported or missing release manifest schema.' }
+    if ([string]$Manifest.version -notmatch '^[a-zA-Z0-9._-]+$') { throw 'Invalid release manifest version.' }
+    if ([string]$Manifest.architecture -ne $Architecture) { throw 'Release manifest architecture mismatch.' }
+    $matches = @($Manifest.assets | Where-Object { [string]$_.target -eq $Target -and [string]$_.architecture -eq $Architecture })
+    if ($matches.Count -ne 1) { throw "Release manifest must contain exactly one $Target/$Architecture asset." }
+    $asset = $matches[0]
+    $expectedFile = "MiniApps-$Target-$Architecture.zip"
+    $expectedUrl = "https://github.com/mson-ssh/miniapp/releases/download/v$($Manifest.version)/$expectedFile"
+    if ([string]$asset.file -ne $expectedFile) { throw 'Release manifest filename mismatch.' }
+    if ([string]$asset.url -ne $expectedUrl) { throw 'Release manifest URL is not an approved immutable GitHub release URL.' }
+    if ([string]$asset.sha256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'Invalid release manifest SHA-256.' }
+    if ([long]$asset.size -le 0) { throw 'Invalid release manifest asset size.' }
+    if ($Target -eq 'net48' -and [bool]$asset.selfContained) { throw 'The net48 manifest asset must be framework-dependent.' }
+    if ($Target -eq 'net10' -and -not [bool]$asset.selfContained) { throw 'The net10 manifest asset must be self-contained.' }
+    return $asset
+}
+
 function Start-MiniApps {
     param(
         [string]$ReleaseBase = 'https://github.com/mson-ssh/miniapp/releases/latest/download',
@@ -26,10 +55,12 @@ function Start-MiniApps {
         # Elevate this exact function, not a second mutable copy downloaded from main.
         $body = ${function:Start-MiniApps}.ToString()
         $buildTestBody = ${function:Test-MiniAppsWindowsBuild}.ToString()
+        $targetBody = ${function:Select-MiniAppsTarget}.ToString()
+        $assetBody = ${function:Select-MiniAppsAsset}.ToString()
         $escapedBase = $ReleaseBase.Replace("'", "''")
         $escapedPath = $PackagePath.Replace("'", "''")
         $escapedHash = $ExpectedSha256.Replace("'", "''")
-        $command = "function Test-MiniAppsWindowsBuild { $buildTestBody }; function Start-MiniApps { $body }; Start-MiniApps -ReleaseBase '$escapedBase' -PackagePath '$escapedPath' -ExpectedSha256 '$escapedHash'"
+        $command = "function Test-MiniAppsWindowsBuild { $buildTestBody }; function Select-MiniAppsTarget { $targetBody }; function Select-MiniAppsAsset { $assetBody }; function Start-MiniApps { $body }; Start-MiniApps -ReleaseBase '$escapedBase' -PackagePath '$escapedPath' -ExpectedSha256 '$escapedHash'"
         $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
         Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded"
         return
@@ -50,8 +81,8 @@ function Start-MiniApps {
         $osRoot.Dispose()
     }
     if (-not $Preview) { Test-MiniAppsWindowsBuild -Build $windowsBuild -DisplayVersion $displayVersion | Out-Null }
-    # .NET Framework 4.8 is an OS component on the supported Windows builds.
-    # Inspect the explicit registry view so a 32-bit bootstrap also detects it.
+    # Prefer the tiny framework-dependent package when .NET Framework 4.8 exists.
+    # Otherwise choose the self-contained .NET 10 package; no runtime is installed.
     $view = if ([Environment]::Is64BitOperatingSystem) { [Microsoft.Win32.RegistryView]::Registry64 } else { [Microsoft.Win32.RegistryView]::Registry32 }
     $baseKey = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, $view)
     $frameworkKey = $null
@@ -62,9 +93,9 @@ function Start-MiniApps {
         if ($frameworkKey) { $frameworkKey.Dispose() }
         $baseKey.Dispose()
     }
-    if ($release -lt 528040) { throw 'MiniApps requires the Windows .NET Framework 4.8 component. No runtime was installed. Check or repair this Windows component.' }
+    $target = Select-MiniAppsTarget -FrameworkRelease $release
     $arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
-    $rid = switch ($arch) { 'AMD64' { 'win-x64' }; 'ARM64' { throw 'This net48 release has not been validated for ARM64. Use a validated ARM64 release.' }; 'x86' { 'win-x86' }; default { throw "Unsupported architecture: $arch" } }
+    $rid = switch ($arch) { 'AMD64' { 'win-x64' }; 'ARM64' { throw 'This release has not been validated for ARM64.' }; 'x86' { throw 'This release is x64 only; x86 is not supported.' }; default { throw "Unsupported architecture: $arch" } }
     $root = Join-Path ([IO.Path]::GetTempPath()) 'MiniApps'
     New-Item -Path $root -ItemType Directory -Force | Out-Null
     if ((Get-Item -LiteralPath $root).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Session root cannot be a junction or symbolic link.' }
@@ -106,17 +137,13 @@ function Start-MiniApps {
             if ($ExpectedSha256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'A local package requires its expected SHA-256.' }
             Copy-Item -LiteralPath $PackagePath -Destination $zip
         } else {
-            if ($ReleaseBase -notmatch '^https://') { throw 'Release URL must use HTTPS.' }
-            $asset = "MiniApps-$rid.zip"
-            Write-Host 'Downloading MiniApps...' -ForegroundColor Cyan
-            # Cross-check the checksum and manifest, then download from the immutable versioned URL.
-            $hashResponse = Invoke-WebRequest -Uri "$ReleaseBase/$asset.sha256" -UseBasicParsing -TimeoutSec 90
-            $ExpectedSha256 = ([string]$hashResponse.Content).Trim().Split(' ')[0]
-            if ($ExpectedSha256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'Invalid release checksum.' }
-            # Release maintainers publish immutable versioned URLs in the companion manifest.
+            if ($ReleaseBase -notmatch '^https://github\.com/mson-ssh/miniapp/releases/(latest/download|download/v[a-zA-Z0-9._-]+)$') { throw 'Release URL is not an approved MiniApps GitHub release URL.' }
             $manifest = Invoke-RestMethod -Uri "$ReleaseBase/manifest-$rid.json" -TimeoutSec 90
-            if ($manifest.sha256 -ne $ExpectedSha256 -or $manifest.url -notmatch '^https://github.com/mson-ssh/miniapp/releases/download/') { throw 'Release manifest mismatch; please retry.' }
-            Invoke-WebRequest -Uri $manifest.url -OutFile $zip -UseBasicParsing -TimeoutSec 600
+            $asset = Select-MiniAppsAsset -Manifest $manifest -Target $target -Architecture $rid
+            $ExpectedSha256 = [string]$asset.sha256
+            Write-Host "Downloading MiniApps $target..." -ForegroundColor Cyan
+            Invoke-WebRequest -Uri ([string]$asset.url) -OutFile $zip -UseBasicParsing -TimeoutSec 600
+            if ((Get-Item -LiteralPath $zip).Length -ne [long]$asset.size) { throw 'Package size does not match the release manifest.' }
         }
         if ((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash -ne $ExpectedSha256) { throw 'Package SHA-256 mismatch. Nothing was executed.' }
         $appDir = Join-Path $session 'app'

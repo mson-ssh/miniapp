@@ -1,6 +1,6 @@
 # MiniApps: WPF migration to .NET Framework 4.8
 
-Status: implemented and locally verified on .NET Framework 4.8 x64. Clean Windows 10/11 VM verification and ARM64 remain outstanding; no GitHub release uploaded.
+Status: implemented and locally verified on .NET Framework 4.8 x64. This one-runtime migration is now superseded by the dual-runtime fallback described in `DUAL-RUNTIME-FALLBACK.md`; the net48 package remains the preferred small download. No GitHub release was uploaded.
 
 ## Measured result (v0.2.0)
 

@@ -1,4 +1,4 @@
-# MiniApps Desktop — WPF v0.2.0 / .NET Framework 4.8
+# MiniApps Desktop — WPF v0.2.0 / dual runtime
 
 Bản nâng cấp độc lập trong `WPF/`; không sửa hoặc thực thi `../Setup.ps1`.
 
@@ -19,14 +19,16 @@ Bản nâng cấp độc lập trong `WPF/`; không sửa hoặc thực thi `../
 
 ## Build và xem thử
 
-Máy phát triển dùng SDK C# hiện đại để build `net48`; reference assemblies chỉ dùng lúc build. Máy khách dùng **Windows 10 1809/build 17763 trở lên và .NET Framework 4.8 trở lên**, không tải kèm .NET Desktop Runtime. Bootstrap kiểm tra riêng Windows build và Framework trước khi chạy, không tự cài runtime. Bản Windows đã lược bỏ/hỏng thành phần này cần khôi phục thành phần Windows.
+Máy phát triển dùng .NET SDK 10 để build chung source cho `net48` và `net10.0-windows`. Máy khách dùng **Windows 10 1809/build 17763 trở lên hoặc Windows 11**. Bootstrap đọc .NET Framework trong Registry: máy có Release `>= 528040` tải gói `net48` nhỏ; máy thiếu Framework 4.8 tải gói .NET 10 self-contained. Fallback mang runtime trong thư mục phiên và không cài runtime vào Windows.
 
 ```powershell
 dotnet build WPF/MiniApps/MiniApps.csproj -c Release
 ./WPF/Publish.ps1
-./WPF/Preview.ps1 # mo goi net48 da publish, khong can SDK tren may khach
+./WPF/Preview.ps1 -Target net48
+./WPF/Preview.ps1 -Target net10
 dotnet build WPF/MiniApps.Tests -c Release
 ./WPF/MiniApps.Tests/bin/Release/net48/MiniApps.Tests.exe
+dotnet ./WPF/MiniApps.Tests/bin/Release/net10.0-windows/MiniApps.Tests.dll
 powershell -NoProfile -ExecutionPolicy Bypass -File WPF/Test-Bootstrap.ps1
 ```
 
@@ -44,11 +46,11 @@ Mở `MiniApps.exe` trực tiếp không tự xin quyền Admin, cho phép xem g
 
 Đầu ra trong `WPF/artifacts/`:
 
-- `MiniApps-win-x64.zip`: app, các DLL phụ thuộc cần thiết, file cấu hình và script; không chứa .NET Desktop Runtime.
-- `MiniApps-win-x64.zip.sha256`: checksum.
-- `manifest-win-x64.json`: URL release cố định và checksum.
+- `MiniApps-net48-win-x64.zip` và `.sha256`: gói nhỏ cho máy có .NET Framework 4.8+.
+- `MiniApps-net10-win-x64.zip` và `.sha256`: gói self-contained cho máy thiếu Framework 4.8.
+- `manifest-win-x64.json`: schema 2 chứa đúng hai asset, target, kiến trúc, URL release cố định, kích thước và checksum.
 
-Ba file dành cho GitHub Release **v0.2.0** trong `mson-ssh/miniapp`. Build riêng `win-x86` nếu cần và kiểm thử trên máy tương ứng. Bản chuyển đổi này ưu tiên xác minh x64; ARM64 chưa được xác minh nên bootstrap báo rõ, không tự chuyển sang x64. Script không tự upload/push/release. Gói hiện chưa ký Authenticode; SHA-256 chống sai/hỏng nội dung, không thay thế chữ ký của nhà phát hành.
+Năm file dành cho cùng GitHub Release **v0.2.0** trong `mson-ssh/miniapp`: hai ZIP, hai checksum và một manifest. Bản đầu chỉ hỗ trợ x64; bootstrap báo rõ với x86/ARM64. Script không tự upload/push/release. Gói hiện chưa ký Authenticode; SHA-256 chống sai/hỏng nội dung, không thay thế chữ ký của nhà phát hành.
 
 Sau khi source bootstrap và release assets đã được phát hành:
 
@@ -58,13 +60,13 @@ irm https://raw.githubusercontent.com/mson-ssh/miniapp/main/WPF/bootstrap.ps1 | 
 
 **Không phát lệnh này cho khách trước khi assets tồn tại.** Khi đổi repo, sửa ReleaseBase và kiểm tra allowlist URL manifest trong bootstrap, cùng URL xuất ra trong Publish.ps1.
 
-Baseline triển khai: Windows 10 1809/build 17763 trở lên hoặc Windows 11, với .NET Framework 4.8+. Từng thiết lập tích hợp kiểm tra build trước khi chạy; tác vụ không tương thích báo **Bỏ qua · Windows không hỗ trợ** và không làm dừng ứng dụng hay thiết lập khác. Thiết lập PowerShell tùy chỉnh dùng baseline 17763. Cần kiểm tra từng edition với chính sách hỗ trợ .NET/Windows trước phát hành thực tế. Windows đã bị lược bỏ thành phần hệ thống hoặc chặn script bằng policy có thể không chạy được. Bản x64 đã build và mở tại máy phát triển; chưa chứng nhận ma trận Windows 10/11 sạch, ARM64 hoặc x86.
+Baseline triển khai: Windows 10 1809/build 17763 trở lên hoặc Windows 11 x64. Có Framework 4.8 thì dùng net48; thiếu Framework thì dùng net10 self-contained. Microsoft chỉ còn hỗ trợ .NET 10 trên các edition Windows 10 1809 còn nằm trong ma trận hỗ trợ tương ứng (đặc biệt LTSC); không coi mọi edition 1809 đã hết vòng đời là được chứng nhận. Cần kiểm thử gói fallback trên VM đúng edition trước khi phát hành cho máy khách. Từng thiết lập tích hợp vẫn kiểm tra build riêng; tác vụ không tương thích báo **Bỏ qua · Windows không hỗ trợ** và không làm dừng tác vụ khác.
 
 ## Luồng bootstrap và dọn dẹp
 
 1. Hàm bootstrap tự nâng quyền bằng chính nội dung đã tải, không tải lại code ở mỗi trang.
 2. Tạo `%TEMP%\MiniApps\<GUID>`, marker sở hữu và khóa file của phiên.
-3. Tải checksum + manifest; kiểm tra khớp rồi tải ZIP từ URL release theo phiên bản. Không chạy nếu SHA-256 sai.
+3. Đọc Framework Release và chọn target trước khi tải. Tải manifest schema 2, kiểm tra target/kiến trúc/URL/kích thước/checksum rồi tải đúng ZIP từ URL release theo phiên bản. Không chạy nếu kích thước hoặc SHA-256 sai.
 4. Giải nén, chuyển TEMP/TMP của tiến trình con vào thư mục phiên, mở WPF; chờ cả cây tiến trình bằng `Start-Process -Wait`.
 5. Thoát xong xóa đúng thư mục GUID có marker, từ chối xóa reparse point/junction. Không đụng app đã cài hay cấu hình người dùng.
 6. Lần chạy sau dọn phiên cũ đã nhả khóa và không có dấu hiệu đang cài. Phiên crash còn marker `installing` được giữ thận trọng để không xóa file tiến trình con còn dùng; cần kiểm tra thủ công trước khi xóa.

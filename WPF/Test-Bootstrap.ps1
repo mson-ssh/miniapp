@@ -7,6 +7,41 @@ catch { $rejected = $_.Exception.Message -match 'build 17762' -and $_.Exception.
 if (-not $rejected) { throw 'Bootstrap must reject Windows build 17762 with the detected and required builds.' }
 if (-not (Test-MiniAppsWindowsBuild -Build 17763 -DisplayVersion '1809')) { throw 'Bootstrap must accept Windows build 17763.' }
 Write-Host 'PASS bootstrap Windows boundary: reject 17762, accept 17763.'
+
+$targetCases = @(
+    @{ Release = 0; Expected = 'net10' },
+    @{ Release = 528039; Expected = 'net10' },
+    @{ Release = 528040; Expected = 'net48' },
+    @{ Release = 533325; Expected = 'net48' }
+)
+foreach ($case in $targetCases) {
+    $actual = Select-MiniAppsTarget -FrameworkRelease $case.Release
+    if ($actual -ne $case.Expected) { throw "Framework release $($case.Release) selected $actual instead of $($case.Expected)." }
+}
+Write-Host 'PASS bootstrap target selection: missing/lower => net10; 4.8/higher => net48.'
+
+$manifest = [pscustomobject]@{
+    schemaVersion = 2
+    version = '0.2.0'
+    architecture = 'win-x64'
+    assets = @(
+        [pscustomobject]@{ target = 'net48'; architecture = 'win-x64'; file = 'MiniApps-net48-win-x64.zip'; url = 'https://github.com/mson-ssh/miniapp/releases/download/v0.2.0/MiniApps-net48-win-x64.zip'; sha256 = ('a' * 64); size = 10; selfContained = $false },
+        [pscustomobject]@{ target = 'net10'; architecture = 'win-x64'; file = 'MiniApps-net10-win-x64.zip'; url = 'https://github.com/mson-ssh/miniapp/releases/download/v0.2.0/MiniApps-net10-win-x64.zip'; sha256 = ('b' * 64); size = 20; selfContained = $true }
+    )
+}
+if ((Select-MiniAppsAsset -Manifest $manifest -Target net48 -Architecture win-x64).file -ne 'MiniApps-net48-win-x64.zip') { throw 'Manifest did not select net48.' }
+if ((Select-MiniAppsAsset -Manifest $manifest -Target net10 -Architecture win-x64).file -ne 'MiniApps-net10-win-x64.zip') { throw 'Manifest did not select net10.' }
+$badHash = $manifest | ConvertTo-Json -Depth 5 | ConvertFrom-Json
+$badHash.assets[0].sha256 = 'invalid'
+$rejected = $false
+try { Select-MiniAppsAsset -Manifest $badHash -Target net48 -Architecture win-x64 | Out-Null } catch { $rejected = $_.Exception.Message -match 'SHA-256' }
+if (-not $rejected) { throw 'Manifest must reject a malformed SHA-256.' }
+$missing = $manifest | ConvertTo-Json -Depth 5 | ConvertFrom-Json
+$missing.assets = @($missing.assets | Where-Object { $_.target -ne 'net10' })
+$rejected = $false
+try { Select-MiniAppsAsset -Manifest $missing -Target net10 -Architecture win-x64 | Out-Null } catch { $rejected = $_.Exception.Message -match 'exactly one' }
+if (-not $rejected) { throw 'Manifest must reject a missing selected asset.' }
+Write-Host 'PASS bootstrap manifest selector and malformed/missing asset checks.'
 $fixture = Join-Path $env:TEMP ('MiniApps-bootstrap-test-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $fixture | Out-Null
 $originalTemp = $env:TEMP; $originalTmp = $env:TMP; $oldResult = $env:MINIAPPS_FIXTURE_RESULT
