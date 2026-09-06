@@ -1,6 +1,7 @@
 param(
     [ValidateSet('win-x64')][string]$Runtime = 'win-x64',
     [ValidatePattern('^[a-zA-Z0-9._-]+$')][string]$Version = '0.3.1',
+    [ValidateSet('net48','both')][string]$Target = 'net48',
     [string]$Dotnet = 'dotnet'
 )
 $ErrorActionPreference = 'Stop'
@@ -55,7 +56,20 @@ function New-MiniAppsPackage {
 }
 
 New-MiniAppsPackage -Target 'net48' -Framework 'net48' -SelfContained $false
-New-MiniAppsPackage -Target 'net10' -Framework 'net10.0-windows' -SelfContained $true
+if ($Target -eq 'both') {
+    New-MiniAppsPackage -Target 'net10' -Framework 'net10.0-windows' -SelfContained $true
+} else {
+    # Preserve the published v0.3.0 fallback byte-for-byte; do not rebuild net10.
+    $fallbackFile = "MiniApps-net10-$Runtime.zip"
+    $fallbackZip = Join-Path $artifacts $fallbackFile
+    $fallbackHash = '828341fa007fb89f1d246758eaa9dae93e835b283464c2d5068be785b3e42b17'
+    $fallbackSize = 63072275
+    Invoke-WebRequest "https://github.com/mson-ssh/miniapp/releases/download/v0.3.0/$fallbackFile" -OutFile $fallbackZip -UseBasicParsing -TimeoutSec 600
+    if ((Get-Item -LiteralPath $fallbackZip).Length -ne $fallbackSize -or (Get-FileHash -LiteralPath $fallbackZip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $fallbackHash) { throw 'Published net10 fallback verification failed.' }
+    Set-Content -LiteralPath ($fallbackZip + '.sha256') -Value "$fallbackHash  $fallbackFile" -Encoding ASCII
+    $assets += [ordered]@{ target = 'net10'; architecture = $Runtime; file = $fallbackFile; url = "https://github.com/mson-ssh/miniapp/releases/download/v$Version/$fallbackFile"; sha256 = $fallbackHash; size = $fallbackSize; selfContained = $true }
+    Write-Host 'Reused net10 v0.3.0 unchanged; no net10 build was performed.'
+}
 
 $manifest = [ordered]@{
     schemaVersion = 2

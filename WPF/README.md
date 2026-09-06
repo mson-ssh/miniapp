@@ -1,5 +1,7 @@
 # MiniApps Desktop — WPF v0.3.1 / dual runtime
 
+Máy mới / phiên AI mới: đọc [AGENTS.md](AGENTS.md) và [bộ tài liệu kỹ thuật](docs/README.md) trước khi sửa hoặc chạy dự án. Nên mở `WPF/` làm workspace; trạng thái bàn giao nằm trong [CURRENT-STATE.md](docs/CURRENT-STATE.md).
+
 `v0.3.1` hiện là mã nguồn đang phát triển, chưa phát hành. Lệnh `irm` vẫn tải Release `v0.3.0`; push mã nguồn không cập nhật các gói ZIP đã phát hành. Bản .NET 10 chưa được đồng bộ tính năng Optimize mới.
 
 ## Optimize trên .NET Framework 4.8

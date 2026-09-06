@@ -235,21 +235,123 @@ try
         Assert(MainViewModel.IsDebloat(new WindowsSettingDefinition { Id = "Debloat", Action = "Custom" }));
         vm.InstallCommand.Execute(null); Assert(!vm.HasStarted && vm.SystemTasks.Count == 0);
     });
-    Check("Optimize Windows preview only simulates four groups", () => {
-        var vm = new MainViewModel(true, readDeviceInfo: () => Task.FromResult(new DeviceInfo("PC", "Dell", "Model", "Serial", "https://www.dell.com/support/home/"))) { Page = 1 };
-        Assert(vm.IsOptimize && vm.OptimizeTasks.Count == 4 && vm.OptimizeTasks.All(t => t.Status == "Sẵn sàng" && t.Progress == 0));
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+    Check("Optimize protocol exposes real download, verify and apply stages", () => {
+        Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_STAGE:Downloading", out var download) && download.Stage == OptimizeStage.Downloading);
+        Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_STAGE:Verifying", out var verify) && verify.Stage == OptimizeStage.Verifying);
+        Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_STAGE:Applying", out var apply) && apply.Stage == OptimizeStage.Applying);
+        Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_LOG:C:\\Logs", out var log) && log.LogDirectory == "C:\\Logs");
+        Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_TASK_JSON:{\"event\":\"START\",\"id\":\"DisableTelemetry\",\"message\":\"running\"}", out var task) && task.Task?.Event == OptimizeTaskEvent.Start && task.Task.Id == "DisableTelemetry");
+        Assert(!OptimizeService.TryParseProtocolLine("MINIAPPS_TASK_JSON:{\"event\":\"999\",\"id\":\"DisableTelemetry\"}", out _));
+        Assert(!OptimizeService.TryParseProtocolLine("MINIAPPS_TASK_JSON:{broken", out _));
+        Assert(!OptimizeService.TryParseProtocolLine("ordinary upstream output", out _));
+    });
+    Check("Optimize service rejects incomplete task telemetry", () => {
+        var fixture = Path.Combine(root, "optimize-incomplete"); Directory.CreateDirectory(fixture);
+        var script = Path.Combine(fixture, "Optimize-Defaults.ps1"); File.WriteAllText(script, "fixture only");
+        var service = new OptimizeService(
+            runPowerShell: (_, _, output) => {
+                output.Report("MINIAPPS_STAGE:Applying");
+                output.Report("MINIAPPS_TASK_JSON:{\"event\":\"DONE\",\"id\":\"RemoveApps\",\"message\":\"done\"}");
+                output.Report("MINIAPPS_STAGE:Completed");
+                return Task.FromResult(0);
+            }, isAdministrator: () => true, createMutex: () => new Mutex(false), scriptPath: script, tempRoot: fixture);
+        var events = new List<OptimizeProgress>();
+        var result = service.RunAsync(new InlineProgress<OptimizeProgress>(events.Add), default).GetAwaiter().GetResult();
+        Assert(!result.Succeeded && result.Message.Contains("16 tác vụ") && events.All(item => item.Stage != OptimizeStage.Completed));
+    });
+    Check("Optimize service treats a task ERROR as failure even with exit code zero", () => {
+        var fixture = Path.Combine(root, "optimize-task-error"); Directory.CreateDirectory(fixture);
+        var script = Path.Combine(fixture, "Optimize-Defaults.ps1"); File.WriteAllText(script, "fixture only");
+        var service = new OptimizeService(
+            runPowerShell: (_, _, output) => {
+                foreach (var task in OptimizeTaskCatalog.Defaults())
+                {
+                    var eventName = task.Id == "DisableRecall" ? "ERROR" : "DONE";
+                    output.Report($"MINIAPPS_TASK_JSON:{{\"event\":\"{eventName}\",\"id\":\"{task.Id}\",\"message\":\"fixture\"}}");
+                }
+                return Task.FromResult(0);
+            }, isAdministrator: () => true, createMutex: () => new Mutex(false), scriptPath: script, tempRoot: fixture);
+        var result = service.RunAsync(new InlineProgress<OptimizeProgress>(_ => { }), default).GetAwaiter().GetResult();
+        Assert(!result.Succeeded && result.Message.Contains("1 tác vụ báo lỗi") && result.Message.Contains("DisableRecall"));
+    });
+    Check("Optimize service reports runner failure at the actual stage without executing a script", () => {
+        var fixture = Path.Combine(root, "optimize-runner"); Directory.CreateDirectory(fixture);
+        var script = Path.Combine(fixture, "Optimize-Defaults.ps1"); File.WriteAllText(script, "fixture only");
+        var stages = new List<OptimizeStage>();
+        var service = new OptimizeService(
+            runPowerShell: (_, work, output) => {
+                Assert(work.StartsWith(fixture, StringComparison.OrdinalIgnoreCase));
+                output.Report("MINIAPPS_STAGE:Downloading");
+                output.Report("MINIAPPS_STAGE:Verifying");
+                output.Report("MINIAPPS_STAGE:Applying");
+                return Task.FromResult(9);
+            },
+            isAdministrator: () => true,
+            createMutex: () => new Mutex(false),
+            scriptPath: script,
+            tempRoot: fixture);
+        var result = service.RunAsync(new InlineProgress<OptimizeProgress>(p => stages.Add(p.Stage)), default).GetAwaiter().GetResult();
+        Assert(!result.Succeeded && result.Message.Contains("áp dụng") && stages.Contains(OptimizeStage.Error));
+        Assert(stages.Take(3).SequenceEqual(new[] { OptimizeStage.Downloading, OptimizeStage.Verifying, OptimizeStage.Applying }));
+        Assert(Directory.GetDirectories(fixture, "optimize-*").Length == 0);
+    });
+    Check("Optimize lifecycle locks conflicting actions and completes once", () => {
+        var release = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fake = new FakeOptimizeService(async progress => {
+            progress.Report(new(OptimizeStage.Downloading, "download"));
+            progress.Report(new(OptimizeStage.Verifying, "verify"));
+            progress.Report(new(OptimizeStage.Applying, "apply"));
+            var tasks = OptimizeTaskCatalog.Defaults();
+            foreach (var task in tasks) progress.Report(new(OptimizeStage.Ready, "", "", new(OptimizeTaskEvent.Queued, task.Id, "Đang chờ")));
+            progress.Report(new(OptimizeStage.Applying, "first", "", new(OptimizeTaskEvent.Start, tasks[0].Id, "Đang chạy")));
+            progress.Report(new(OptimizeStage.Applying, "first done", "", new(OptimizeTaskEvent.Done, tasks[0].Id, "Đã áp dụng")));
+            progress.Report(new(OptimizeStage.Applying, "second", "", new(OptimizeTaskEvent.Start, tasks[1].Id, "Đang chạy")));
+            await release.Task;
+            progress.Report(new(OptimizeStage.Applying, "second done", "", new(OptimizeTaskEvent.Done, tasks[1].Id, "Đã áp dụng")));
+            foreach (var task in tasks.Skip(2))
+            {
+                progress.Report(new(OptimizeStage.Applying, task.Name, "", new(OptimizeTaskEvent.Start, task.Id, "Đang chạy")));
+                progress.Report(new(OptimizeStage.Applying, task.Name, "", new(OptimizeTaskEvent.Done, task.Id, "Đã áp dụng")));
+            }
+            return new(true, "completed", "");
+        });
+        var vm = new MainViewModel(false, developerEdition: false, optimizeService: fake) { Page = 1 };
+        Assert(vm.OptimizeTasks.Count == 17 && vm.OptimizeTasks.All(t => t.Status == "Sẵn sàng" && t.Progress == 0));
         vm.OptimizeCommand.Execute(null);
-        Assert(SpinWait.SpinUntil(() => vm.IsBusy, TimeSpan.FromSeconds(1)));
+        if (!SpinWait.SpinUntil(() => vm.IsOptimizeRunning && vm.OptimizeStage == OptimizeStage.Applying, TimeSpan.FromSeconds(2)))
+            throw new Exception($"Optimize did not reach Applying: running={vm.IsOptimizeRunning}, stage={vm.OptimizeStage}, busy={vm.IsBusy}");
+        if (!vm.IsBusy || vm.OptimizeCommand.CanExecute(null) || vm.InstallCommand.CanExecute(null))
+            throw new Exception($"Conflicting commands not locked: busy={vm.IsBusy}, optimize={vm.OptimizeCommand.CanExecute(null)}, install={vm.InstallCommand.CanExecute(null)}");
+        var lastTask = vm.OptimizeTasks[vm.OptimizeTasks.Count - 1];
+        if (vm.OptimizeTasks[0].Id != "DisableTelemetry" || !vm.OptimizeTasks[0].IsRunning || lastTask.Id != "RemoveApps" || !lastTask.IsSucceeded)
+            throw new Exception("Optimize task list did not keep the running row first and move the completed row last.");
+        if (vm.ShowInstallCancel || vm.CancelCommand.CanExecute(null) || !vm.InstallBlockingMessage.Contains("Optimize Windows"))
+            throw new Exception($"Install cancel/block state incorrect: cancelVisible={vm.ShowInstallCancel}, cancel={vm.CancelCommand.CanExecute(null)}, message={vm.InstallBlockingMessage}");
         vm.Page = 2; Assert(vm.IsDriver);
         vm.Page = 0; Assert(vm.IsInstall);
         vm.Page = 3; Assert(vm.IsInstall);
-        Assert(SpinWait.SpinUntil(() => !vm.IsBusy, TimeSpan.FromSeconds(5)));
-        stopwatch.Stop();
-        Assert(stopwatch.Elapsed < TimeSpan.FromSeconds(1));
-        vm.Page = 3; Assert(vm.IsSetting);
-        Assert(vm.OptimizeStarted && vm.OptimizeOverall == 100 && vm.OptimizeTasks.All(t => t.Status == "Hoàn tất · mô phỏng" && t.Progress == 100));
-        Assert(vm.OptimizeSummary.Contains("không có thay đổi"));
+        release.SetResult(null);
+        if (!SpinWait.SpinUntil(() => !vm.IsBusy, TimeSpan.FromSeconds(2))) throw new Exception("Optimize completion timed out.");
+        if (!vm.OptimizeFinished || vm.OptimizeStage != OptimizeStage.Completed || vm.OptimizeButtonText != "Đã tối ưu" || vm.OptimizeCommand.CanExecute(null))
+            throw new Exception($"Completed state incorrect: finished={vm.OptimizeFinished}, stage={vm.OptimizeStage}, button={vm.OptimizeButtonText}, command={vm.OptimizeCommand.CanExecute(null)}");
+        if (!vm.OptimizeTasks.All(t => t.IsSucceeded && t.Progress == 100)) throw new Exception("Optimize task rows did not complete.");
+    });
+    Check("Optimize failure identifies the stage and remains retryable", () => {
+        var attempts = 0;
+        var fake = new FakeOptimizeService(progress => {
+            attempts++;
+            progress.Report(new(OptimizeStage.Verifying, "verify"));
+            return Task.FromResult(new OptimizeResult(false, "Checksum không hợp lệ ở bước xác minh.", ""));
+        });
+        var vm = new MainViewModel(false, developerEdition: false, optimizeService: fake) { Page = 1 };
+        vm.OptimizeCommand.Execute(null);
+        if (!SpinWait.SpinUntil(() => !vm.IsBusy && attempts == 1, TimeSpan.FromSeconds(2)))
+            throw new Exception($"First failure run timed out: attempts={attempts}, busy={vm.IsBusy}, stage={vm.OptimizeStage}");
+        if (vm.OptimizeFinished || vm.OptimizeStage != OptimizeStage.Error || !vm.OptimizeSummary.Contains("xác minh") || !vm.OptimizeCommand.CanExecute(null))
+            throw new Exception($"Unexpected retry state: finished={vm.OptimizeFinished}, stage={vm.OptimizeStage}, busy={vm.IsBusy}, command={vm.OptimizeCommand.CanExecute(null)}, summary={vm.OptimizeSummary}");
+        vm.OptimizeCommand.Execute(null);
+        if (!SpinWait.SpinUntil(() => attempts == 2 && vm.OptimizeStage == OptimizeStage.Error && !vm.IsBusy, TimeSpan.FromSeconds(2)))
+            throw new Exception($"Retry timed out: attempts={attempts}, busy={vm.IsBusy}, stage={vm.OptimizeStage}");
     });
     Check("Windows summary handles partial failures and cancellation", () => {
         var failed = new WindowsProgressTracker(3);
@@ -455,6 +557,35 @@ var renderThread = new Thread(() =>
             var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder(); encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
             using var output = File.Create(Path.Combine(targetDir, name)); encoder.Save(output);
         }
+        vm.Page = 1;
+        vm.OptimizeCommand.Execute(null);
+        var optimizeFrame = new System.Windows.Threading.DispatcherFrame();
+        var optimizeDeadline = DateTime.UtcNow.AddSeconds(5);
+        var optimizeTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
+        optimizeTimer.Tick += (_, _) =>
+        {
+            if (vm.OptimizeTasks.Any(task => task.IsRunning) && vm.OptimizeTasks.Any(task => task.IsSucceeded) || DateTime.UtcNow >= optimizeDeadline) optimizeFrame.Continue = false;
+        };
+        optimizeTimer.Start(); System.Windows.Threading.Dispatcher.PushFrame(optimizeFrame); optimizeTimer.Stop();
+        if (!vm.IsOptimizeRunning || vm.OptimizeStage != OptimizeStage.Applying || !vm.OptimizeIndeterminate || vm.ShowInstallCancel)
+            throw new Exception("Optimize preview did not expose the Applying UI state.");
+        var optimizeList = (System.Windows.Controls.ItemsControl)window.FindName("OptimizeTaskList");
+        var movedTask = vm.OptimizeTasks[vm.OptimizeTasks.Count - 1];
+        var movedContainer = (System.Windows.FrameworkElement?)optimizeList.ItemContainerGenerator.ContainerFromItem(movedTask);
+        if (!movedTask.IsSucceeded || movedContainer?.RenderTransform is not System.Windows.Media.TranslateTransform movedTransform || !movedTransform.HasAnimatedProperties)
+            throw new Exception("The completed Optimize row was not animated when it moved to the bottom.");
+        Capture("optimize-applying.png");
+        var optimizeCompletionFrame = new System.Windows.Threading.DispatcherFrame();
+        var optimizeCompletionTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
+        optimizeCompletionTimer.Tick += (_, _) =>
+        {
+            if (!vm.IsBusy || DateTime.UtcNow >= optimizeDeadline) optimizeCompletionFrame.Continue = false;
+        };
+        optimizeCompletionTimer.Start(); System.Windows.Threading.Dispatcher.PushFrame(optimizeCompletionFrame); optimizeCompletionTimer.Stop();
+        if (vm.IsBusy || !vm.OptimizeFinished || vm.OptimizeButtonText != "Đã xem trước" || vm.OptimizeCommand.CanExecute(null))
+            throw new Exception("Optimize preview completion UI is incorrect.");
+        Capture("optimize-completed.png");
+        Console.WriteLine("PASS WPF Optimize lifecycle and render");
         vm.Page = 3; vm.SettingsTab = 1;
         Capture("settings-windows.png");
         var originalAction = vm.SelectedWindows!.Action;
@@ -533,6 +664,14 @@ if (renderError != null) throw new Exception("WPF rendering failed", renderError
 Console.WriteLine("PASS WPF startup, navigation and render of all 4 pages");
 
 sealed class InlineProgress<T>(Action<T> action) : IProgress<T> { public void Report(T value) => action(value); }
+sealed class FakeOptimizeService(Func<IProgress<OptimizeProgress>, Task<OptimizeResult>> run) : IOptimizeService
+{
+    public Task<OptimizeResult> RunAsync(IProgress<OptimizeProgress> progress, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return run(progress);
+    }
+}
 sealed class FakeHttp : System.Net.Http.HttpMessageHandler
 {
     public int Calls;

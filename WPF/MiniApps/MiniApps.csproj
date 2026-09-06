@@ -26,5 +26,6 @@
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
     <Content Remove="Scripts\Optimize-Defaults.ps1" />
+    <Content Remove="Scripts\Optimize-TaskBridge.ps1" />
   </ItemGroup>
 </Project>

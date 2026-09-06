@@ -53,6 +53,17 @@ public sealed class WindowsOption(WindowsSettingDefinition definition) : Observa
     public string Description => Definition.Description;
 }
 
+public enum OptimizeTaskState
+{
+    Ready,
+    Waiting,
+    Running,
+    Succeeded,
+    Skipped,
+    Failed,
+    NotConfirmed
+}
+
 public sealed class OptimizePreviewRow(string id, string name, string description) : Observable
 {
     public string Id { get; } = id;
@@ -60,8 +71,47 @@ public sealed class OptimizePreviewRow(string id, string name, string descriptio
     public string Description { get; } = description;
     private string status = "Sẵn sàng";
     public string Status { get => status; set => Set(ref status, value); }
+    private OptimizeTaskState state = OptimizeTaskState.Ready;
+    public OptimizeTaskState State
+    {
+        get => state;
+        set
+        {
+            if (!Set(ref state, value)) return;
+            Raise(nameof(IsRunning)); Raise(nameof(IsSucceeded)); Raise(nameof(IsSkipped)); Raise(nameof(IsFailed)); Raise(nameof(IsWaiting));
+        }
+    }
+    public bool IsRunning => State == OptimizeTaskState.Running;
+    public bool IsSucceeded => State == OptimizeTaskState.Succeeded;
+    public bool IsSkipped => State == OptimizeTaskState.Skipped;
+    public bool IsFailed => State is OptimizeTaskState.Failed or OptimizeTaskState.NotConfirmed;
+    public bool IsWaiting => State is OptimizeTaskState.Ready or OptimizeTaskState.Waiting;
     private double progress;
     public double Progress { get => progress; set => Set(ref progress, value); }
+}
+
+public static class OptimizeTaskCatalog
+{
+    public static List<OptimizePreviewRow> Defaults() =>
+    [
+        new("RemoveApps", "Gỡ ứng dụng mặc định", "Gỡ danh sách ứng dụng mặc định do Win11Debloat xác định."),
+        new("DisableTelemetry", "Giảm dữ liệu chẩn đoán", "Tắt các thành phần telemetry trong profile Default."),
+        new("DisableSuggestions", "Tắt nội dung đề xuất", "Ẩn gợi ý và nội dung quảng bá trong Windows."),
+        new("DisableEdgeAds", "Tắt quảng cáo Edge", "Giảm lời mời và nội dung quảng bá của Microsoft Edge."),
+        new("DisableLockscreenTips", "Tắt mẹo màn hình khóa", "Ẩn mẹo và nội dung đề xuất trên màn hình khóa."),
+        new("DisableBing", "Tắt Bing trong tìm kiếm", "Giữ tìm kiếm Start tập trung vào nội dung trên máy."),
+        new("DisableStoreSearchSuggestions", "Tắt gợi ý Store", "Ẩn gợi ý Microsoft Store trong kết quả tìm kiếm."),
+        new("DisableCopilot", "Tắt Copilot", "Tắt tích hợp Windows Copilot theo profile Default."),
+        new("DisableRecall", "Tắt Recall", "Tắt Windows Recall trên thiết bị có hỗ trợ."),
+        new("DisableClickToDo", "Tắt Click to Do", "Tắt Click to Do trên thiết bị có hỗ trợ."),
+        new("DisableAISvcAutoStart", "Tắt tự chạy dịch vụ AI", "Ngăn dịch vụ AI liên quan tự khởi động."),
+        new("DisableWidgets", "Tắt Widgets", "Ẩn và tắt bảng Widgets trên taskbar."),
+        new("HideChat", "Ẩn Chat", "Ẩn nút Chat khỏi taskbar."),
+        new("ShowKnownFileExt", "Hiện đuôi tệp", "Hiện phần mở rộng của các loại tệp đã biết."),
+        new("DisableDragTray", "Tắt Drag Tray", "Tắt khay chia sẻ xuất hiện khi kéo tệp."),
+        new("Hide3dObjects", "Ẩn 3D Objects", "Ẩn thư mục 3D Objects khỏi Explorer."),
+        new("DisableModernStandbyNetworking", "Tắt mạng khi Modern Standby", "Hạn chế kết nối mạng khi máy ở Modern Standby.")
+    ];
 }
 
 public static class Catalog

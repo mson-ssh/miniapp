@@ -13,7 +13,10 @@ public partial class MainWindow : Window
     {
         if (!model.IsBusy) return;
         e.Cancel = true;
-        MessageBox.Show("Đang có tác vụ chạy. Chọn ‘Dừng hàng đợi’ rồi chờ bộ cài hiện tại kết thúc trước khi thoát.", "MiniApps", MessageBoxButton.OK, MessageBoxImage.Information);
+        var message = model.IsOptimizeRunning
+            ? "Optimize Windows đang chạy. Hãy chờ tác vụ hoàn tất trước khi thoát."
+            : "Đang có tác vụ cài đặt. Chọn ‘Dừng hàng đợi’ rồi chờ bộ cài hiện tại kết thúc trước khi thoát.";
+        MessageBox.Show(message, "MiniApps", MessageBoxButton.OK, MessageBoxImage.Information);
     }
     private void OnProgressCardClick(object sender, MouseButtonEventArgs e)
     {
