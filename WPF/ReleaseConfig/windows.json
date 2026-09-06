@@ -1,0 +1,87 @@
+{
+  "SchemaVersion": 2,
+  "Items": [
+    {
+      "Id": "Desktop",
+      "Name": "Hi\u1EC7n bi\u1EC3u t\u01B0\u1EE3ng Desktop",
+      "Description": "This PC, Control Panel v\u00E0 th\u01B0 m\u1EE5c ng\u01B0\u1EDDi d\u00F9ng.",
+      "Action": "Desktop",
+      "Script": "$ErrorActionPreference = \u0027Stop\u0027\n$key = \u0027HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\HideDesktopIcons\\NewStartPanel\u0027\nNew-Item -Path $key -Force | Out-Null\nforeach ($id in @(\u0027{20D04FE0-3AEA-1069-A2D8-08002B30309D}\u0027, \u0027{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}\u0027, \u0027{59031a47-3f72-44a7-89c5-5595fe6b30ee}\u0027)) {\n    New-ItemProperty -Path $key -Name $id -PropertyType DWord -Value 0 -Force | Out-Null\n}",
+      "IsCustom": false,
+      "TaskId": "windows:Desktop"
+    },
+    {
+      "Id": "Timezone",
+      "Name": "M\u00FAi gi\u1EDD Vi\u1EC7t Nam",
+      "Description": "\u0110\u1EB7t UTC\u002B07:00 (Bangkok, H\u00E0 N\u1ED9i, Jakarta).",
+      "Action": "Timezone",
+      "Script": "Set-TimeZone -Id \u0027SE Asia Standard Time\u0027 -ErrorAction Stop",
+      "IsCustom": false,
+      "TaskId": "windows:Timezone"
+    },
+    {
+      "Id": "Dns",
+      "Name": "DNS Cloudflare / Google",
+      "Description": "\u0110\u1ED5i DNS tr\u00EAn c\u00E1c card m\u1EA1ng v\u1EADt l\u00FD \u0111ang k\u1EBFt n\u1ED1i.",
+      "Action": "Dns",
+      "Script": "$ErrorActionPreference = \u0027Stop\u0027\n$adapters = @(Get-NetAdapter -Physical | Where-Object Status -eq \u0027Up\u0027)\nif ($adapters.Count -eq 0) { throw \u0027No active physical network adapter.\u0027 }\nforeach ($adapter in $adapters) {\n    Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses @(\u00271.1.1.1\u0027,\u00278.8.8.8\u0027)\n}",
+      "IsCustom": false,
+      "TaskId": "windows:Dns"
+    },
+    {
+      "Id": "FastStartup",
+      "Name": "T\u1EAFt Fast Startup",
+      "Description": "T\u1EAFt c\u01A1 ch\u1EBF kh\u1EDFi \u0111\u1ED9ng nhanh c\u1EE7a Windows.",
+      "Action": "FastStartup",
+      "Script": "New-ItemProperty \u0027HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Power\u0027 -Name HiberbootEnabled -Value 0 -PropertyType DWord -Force -ErrorAction Stop | Out-Null",
+      "IsCustom": false,
+      "TaskId": "windows:FastStartup"
+    },
+    {
+      "Id": "Power",
+      "Name": "Kh\u00F4ng t\u1EF1 t\u1EAFt m\u00E0n h\u00ECnh / sleep",
+      "Description": "\u00C1p d\u1EE5ng khi d\u00F9ng ngu\u1ED3n \u0111i\u1EC7n v\u00E0 pin; t\u0103ng ti\u00EAu th\u1EE5 pin.",
+      "Action": "Power",
+      "Script": "foreach ($setting in @(\u0027monitor-timeout-ac\u0027,\u0027monitor-timeout-dc\u0027,\u0027standby-timeout-ac\u0027,\u0027standby-timeout-dc\u0027)) {\n    powercfg /change $setting 0\n    if ($LASTEXITCODE -ne 0) { throw \u0022powercfg failed: $setting ($LASTEXITCODE)\u0022 }\n}",
+      "IsCustom": false,
+      "TaskId": "windows:Power"
+    },
+    {
+      "Id": "PasswordExpiry",
+      "Name": "M\u1EADt kh\u1EA9u kh\u00F4ng h\u1EBFt h\u1EA1n",
+      "Description": "Thay \u0111\u1ED5i ch\u00EDnh s\u00E1ch h\u1EBFt h\u1EA1n m\u1EADt kh\u1EA9u c\u1EE5c b\u1ED9.",
+      "Action": "PasswordExpiry",
+      "Script": "net accounts /maxpwage:unlimited; if ($LASTEXITCODE -ne 0) { throw \u0022net accounts failed ($LASTEXITCODE)\u0022 }",
+      "IsCustom": false,
+      "TaskId": "windows:PasswordExpiry"
+    },
+    {
+      "Id": "Winget",
+      "Name": "Winget (update)",
+      "Description": "C\u1EADp nh\u1EADt WinGet / App Installer v\u00E0 dependency Microsoft; kh\u00F4ng upgrade to\u00E0n b\u1ED9 \u1EE9ng d\u1EE5ng.",
+      "Action": "Winget",
+      "Script": "# Called only after explicit selection and Office/WPS confirmation. No upgrade --all.\n$ErrorActionPreference = \u0027Stop\u0027\n$ProgressPreference = \u0027SilentlyContinue\u0027\n[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12\n$work = Join-Path $env:TEMP (\u0027winget-\u0027 \u002B [Guid]::NewGuid().ToString(\u0027N\u0027))\nNew-Item -ItemType Directory -Path $work | Out-Null\n$release = Invoke-RestMethod \u0027https://api.github.com/repos/microsoft/winget-cli/releases/latest\u0027 -TimeoutSec 60\n$target = [version]($release.tag_name -replace \u0027^v\u0027,\u0027\u0027)\nfunction Get-ClientVersion {\n    $cmd = Get-Command winget.exe -ErrorAction SilentlyContinue\n    if (-not $cmd) { return $null }\n    $text = \u0026 $cmd.Source --version\n    if ($LASTEXITCODE -ne 0) { return $null }\n    $parsed = $null\n    if ([version]::TryParse((\u0022$text\u0022.Trim() -replace \u0027^v\u0027,\u0027\u0027), [ref]$parsed)) { return $parsed }\n    return $null\n}\n$before = Get-ClientVersion\nif ($before -and $before -ge $target) { Write-Output \u0022WinGet $before is already current (stable $target).\u0022; return }\nfunction Get-ReleaseAsset([string]$Name) {\n    $asset = @($release.assets | Where-Object name -eq $Name)\n    if ($asset.Count -ne 1 -or $asset[0].browser_download_url -notlike \u0027https://github.com/microsoft/winget-cli/releases/download/*\u0027) { throw \u0022Missing official release asset: $Name\u0022 }\n    $path = Join-Path $work $Name\n    Write-Output \u0022Downloading $Name\u0022 | Out-Host\n    Invoke-WebRequest $asset[0].browser_download_url -OutFile $path -UseBasicParsing -TimeoutSec 600\n    if ($asset[0].digest -notmatch \u0027^sha256:([a-fA-F0-9]{64})$\u0027) { throw \u0022Missing SHA-256 for $Name\u0022 }\n    if ((Get-FileHash $path -Algorithm SHA256).Hash -ne $Matches[1]) { throw \u0022SHA-256 mismatch: $Name\u0022 }\n    return $path\n}\n$rawArch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }\n$arch = switch ($rawArch) { \u0027AMD64\u0027 { \u0027x64\u0027 }; \u0027ARM64\u0027 { \u0027arm64\u0027 }; \u0027x86\u0027 { \u0027x86\u0027 }; default { throw \u0022Unsupported architecture: $rawArch\u0022 } }\n$depsPath = Get-ReleaseAsset \u0027DesktopAppInstaller_Dependencies.json\u0027\n$deps = (Get-Content -LiteralPath $depsPath -Raw | ConvertFrom-Json).Dependencies\nif (-not $deps) { throw \u0027Dependency manifest is empty.\u0027 }\n$missing = @($deps | Where-Object {\n    $dep = $_\n    -not (Get-AppxPackage -Name $dep.Name | Where-Object { (\u0022$($_.Architecture)\u0022 -eq $arch -or \u0022$($_.Architecture)\u0022 -eq \u0027Neutral\u0027) -and [version]$_.Version -ge [version]$dep.Version })\n})\nif ($missing.Count) {\n    $zip = Get-ReleaseAsset \u0027DesktopAppInstaller_Dependencies.zip\u0027\n    $folder = Join-Path $work \u0027dependencies\u0027\n    Expand-Archive -LiteralPath $zip -DestinationPath $folder\n    foreach ($dep in $missing) {\n        $file = Get-ChildItem -LiteralPath (Join-Path $folder $arch) -Filter \u0022$($dep.Name)_*.appx\u0022 | Select-Object -First 1\n        if (-not $file) { throw \u0022Missing dependency: $($dep.Name) for $arch\u0022 }\n        Write-Output \u0022Registering dependency $($dep.Name)\u0022\n        Add-AppxPackage -Path $file.FullName -ErrorAction Stop\n    }\n}\n$bundle = Get-ReleaseAsset \u0027Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle\u0027\nAdd-AppxPackage -Path $bundle -ErrorAction Stop\n$after = Get-ClientVersion\nif (-not $after -or $after -lt $target) { throw \u0022WinGet verification failed. Expected $target; got $after.\u0022 }\nWrite-Output \u0022WinGet updated: $before -\u003E $after\u0022\n",
+      "IsCustom": false,
+      "TaskId": "windows:Winget"
+    },
+    {
+      "Id": "Debloat",
+      "Name": "Debloatware",
+      "Description": "G\u1EE1 app c\u00E0i s\u1EB5n v\u00E0 \u00E1p d\u1EE5ng m\u1EB7c \u0111\u1ECBnh Win11Debloat; c\u00F3 th\u1EC3 c\u1EA7n \u0111\u0103ng xu\u1EA5t.",
+      "Action": "Debloat",
+      "Script": "# Versioned upstream source, downloaded inside the MiniApps session, not executed via remote iex.\n$ErrorActionPreference = \u0027Stop\u0027\n$ProgressPreference = \u0027SilentlyContinue\u0027\n[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12\n$version = \u00272026.08.24\u0027\n$work = Join-Path $env:TEMP (\u0027debloat-\u0027 \u002B [Guid]::NewGuid().ToString(\u0027N\u0027))\nNew-Item -ItemType Directory -Path $work | Out-Null\n$zip = Join-Path $work \u0027Win11Debloat.zip\u0027\nWrite-Output \u0022Downloading Win11Debloat $version. Default profile removes preinstalled apps and changes Windows settings.\u0022\nInvoke-WebRequest \u0022https://github.com/Raphire/Win11Debloat/archive/refs/tags/$version.zip\u0022 -OutFile $zip -UseBasicParsing -TimeoutSec 600\nExpand-Archive -LiteralPath $zip -DestinationPath $work\n$script = Join-Path $work \u0022Win11Debloat-$version\\Win11Debloat.ps1\u0022\nif (-not (Test-Path -LiteralPath $script)) { throw \u0027Win11Debloat entry point is missing.\u0027 }\n# Isolate upstream exit statements and error stream, and suppress interactive prompts / Explorer restart.\n$stderr = Join-Path $work \u0027stderr.txt\u0027\n\u0026 (Join-Path $PSHOME \u0027powershell.exe\u0027) -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $script -RunDefaults -Silent -SkipExplorerRestart -LogPath $work 2\u003E $stderr\n$code = $LASTEXITCODE\n$errors = if (Test-Path $stderr) { Get-Content -LiteralPath $stderr -Raw } else { \u0027\u0027 }\nif ($code -ne 0 -or -not [string]::IsNullOrWhiteSpace($errors)) { throw \u0022Win11Debloat reported errors (exit $code): $errors\u0022 }\nWrite-Output \u0027Win11Debloat finished without reported errors. Sign out/restart to apply Explorer changes.\u0027\n",
+      "IsCustom": false,
+      "TaskId": "windows:Debloat"
+    },
+    {
+      "Id": "InfoExe",
+      "Name": "Info.exe",
+      "Description": "T\u1EA3i info.exe v\u1EC1 Desktop; kh\u00F4ng t\u1EF1 \u0111\u1ED9ng m\u1EDF \u1EE9ng d\u1EE5ng.",
+      "Action": "InfoExe",
+      "Script": "$ErrorActionPreference = \u0027Stop\u0027\n$url = \u0027https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/info.exe\u0027\n$desktop = [Environment]::GetFolderPath(\u0027Desktop\u0027)\nif ([string]::IsNullOrWhiteSpace($desktop)) { throw \u0027Cannot resolve the Desktop folder.\u0027 }\n$destination = Join-Path $desktop \u0027info.exe\u0027\n$staged = Join-Path ([IO.Path]::GetTempPath()) (\u0027MiniApps-info-\u0027 \u002B [guid]::NewGuid().ToString(\u0027N\u0027) \u002B \u0027.exe\u0027)\ntry {\n    Invoke-WebRequest -Uri $url -OutFile $staged -UseBasicParsing -ErrorAction Stop\n    $stream = [IO.File]::OpenRead($staged)\n    try {\n        if ($stream.Length -lt 2 -or $stream.ReadByte() -ne 0x4D -or $stream.ReadByte() -ne 0x5A) {\n            throw \u0027Downloaded file is not a Windows executable.\u0027\n        }\n    }\n    finally { $stream.Dispose() }\n    Copy-Item -LiteralPath $staged -Destination $destination -Force -ErrorAction Stop\n}\nfinally { Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue }",
+      "IsCustom": false,
+      "TaskId": "windows:InfoExe"
+    }
+  ],
+  "RemovedDefaultIds": []
+}

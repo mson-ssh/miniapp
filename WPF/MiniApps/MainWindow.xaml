@@ -7,7 +7,7 @@
       <Grid Margin="14,28,14,20">
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
         <StackPanel Margin="14,0,0,32"><TextBlock Text="MiniApps" FontSize="23" FontWeight="SemiBold" /><TextBlock Text="WINDOWS SETUP" FontSize="10" Foreground="{StaticResource Muted}" Margin="1,7,0,0" /></StackPanel>
-        <ListBox Grid.Row="1" SelectedIndex="{Binding Page}" Background="Transparent" BorderThickness="0" AutomationProperties.Name="Điều hướng">
+        <ListBox x:Name="NavigationList" Grid.Row="1" SelectedIndex="{Binding Page}" Background="Transparent" BorderThickness="0" AutomationProperties.Name="Điều hướng">
           <ListBox.Resources><Style TargetType="ListBoxItem">
             <Setter Property="Padding" Value="14,13" /><Setter Property="Margin" Value="0,3" /><Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
@@ -25,7 +25,7 @@
           <ListBoxItem Content="Install app" />
           <ListBoxItem Content="Optimize Windows" />
           <ListBoxItem Content="Driver" />
-          <ListBoxItem Content="Setting" IsEnabled="{Binding DataContext.IsIdle, RelativeSource={RelativeSource AncestorType=ListBox}}" />
+          <ListBoxItem Content="Setting" Visibility="{Binding IsDeveloperEdition, Converter={StaticResource BoolVisibility}}" IsEnabled="{Binding DataContext.IsIdle, RelativeSource={RelativeSource AncestorType=ListBox}}" />
         </ListBox>
         <StackPanel Grid.Row="2" Margin="14,0,0,0"><TextBlock Text="Gọn nhẹ. Sẵn sàng." FontSize="12" Foreground="{StaticResource Muted}" /><TextBlock Text="{Binding RuntimeLabel}" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,6,0,0" TextWrapping="Wrap" /></StackPanel>
       </Grid>

@@ -15,7 +15,7 @@ public sealed class RelayCommand(Action action, Func<bool>? canExecute = null) :
 {
     public event EventHandler? CanExecuteChanged;
     public bool CanExecute(object? parameter) => canExecute?.Invoke() ?? true;
-    public void Execute(object? parameter) => action();
+    public void Execute(object? parameter) { if (CanExecute(parameter)) action(); }
     public void Refresh() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
 }
 
@@ -47,6 +47,7 @@ public sealed class MainViewModel : Observable
     private List<AppDefinition> catalog;
     private List<WindowsSettingDefinition> windowsCatalog;
     private readonly bool preview;
+    private readonly bool settingsWritable;
     private readonly Func<OfficeChoice> chooseOffice;
     private readonly Func<string, bool> confirmDelete;
     private readonly Func<Task<DeviceInfo>> readDeviceInfo;
@@ -73,17 +74,18 @@ public sealed class MainViewModel : Observable
     ];
     public ICollectionView FilteredApps { get; }
     public ICollectionView FilteredWindows { get; }
+    public bool IsDeveloperEdition { get; }
     private int settingsTab;
     public int SettingsTab { get => settingsTab; set { if (Set(ref settingsTab, value)) RefreshSettingsState(); } }
     public string Machine => $"{Environment.MachineName}  ·  Windows {WindowsCompatibility.CurrentBuild}  ·  {System.Runtime.InteropServices.RuntimeInformation.OSArchitecture}";
-    public string RuntimeLabel => preview ? "CHẾ ĐỘ XEM THỬ · KHÔNG CÀI ĐẶT" : "Windows desktop · v0.2.0";
+    public string RuntimeLabel => IsDeveloperEdition ? (preview ? "DEVELOPER · XEM THỬ" : "DEVELOPER · v0.3.0") : (preview ? "PUBLIC · XEM THỬ" : "Windows desktop · v0.3.0");
     private int page;
     public int Page
     {
         get => page;
         set
         {
-            if (value == 3 && IsBusy) return;
+            if (value == 3 && (IsBusy || !IsDeveloperEdition)) return;
             if (Set(ref page, value))
             {
                 Raise(nameof(IsInstall)); Raise(nameof(IsOptimize)); Raise(nameof(IsDriver)); Raise(nameof(IsSetting));
@@ -94,7 +96,7 @@ public sealed class MainViewModel : Observable
     public bool IsInstall => Page == 0;
     public bool IsOptimize => Page == 1;
     public bool IsDriver => Page == 2;
-    public bool IsSetting => Page == 3;
+    public bool IsSetting => IsDeveloperEdition && Page == 3;
     private bool driverLoaded;
     private bool driverLoading;
     public bool IsDriverLoading { get => driverLoading; private set { if (Set(ref driverLoading, value)) Raise(nameof(DriverSupportLabel)); RefreshDriverCommands(); } }
@@ -175,13 +177,17 @@ public sealed class MainViewModel : Observable
     public RelayCommand ToggleWindowsDetailsCommand { get; }
     public RelayCommand OptimizeCommand { get; }
 
-    public MainViewModel(bool preview = false, Func<OfficeChoice>? chooseOffice = null, Func<string, bool>? confirmDelete = null, Func<Task<DeviceInfo>>? readDeviceInfo = null)
+    public MainViewModel(bool preview = false, Func<OfficeChoice>? chooseOffice = null, Func<string, bool>? confirmDelete = null,
+        Func<Task<DeviceInfo>>? readDeviceInfo = null, bool? developerEdition = null, string? settingsDirectory = null,
+        bool settingsWritable = false, bool requireSettings = false)
     {
         this.preview = preview;
+        IsDeveloperEdition = developerEdition ?? BuildEdition.IsDeveloper;
+        this.settingsWritable = IsDeveloperEdition && (settingsWritable || !preview);
         this.chooseOffice = chooseOffice ?? OfficeChoiceDialog.Ask;
         this.confirmDelete = confirmDelete ?? (message => MessageBox.Show(message, "Xóa khỏi danh sách", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes);
         this.readDeviceInfo = readDeviceInfo ?? DeviceInfoService.ReadAsync;
-        store = new SettingsStore(preview ? Path.Combine(Path.GetTempPath(), "MiniApps-preview-settings") : null);
+        store = new SettingsStore(settingsDirectory ?? (preview ? Path.Combine(Path.GetTempPath(), "MiniApps-preview-settings") : null));
         FilteredApps = CollectionViewSource.GetDefaultView(EditableApps);
         FilteredWindows = CollectionViewSource.GetDefaultView(EditableWindows);
         FilteredApps.Filter = item => MatchesApp((AppDefinition)item);
@@ -190,18 +196,19 @@ public sealed class MainViewModel : Observable
         EditableWindows.CollectionChanged += OnWindowsChanged;
         catalog = Catalog.Defaults();
         windowsCatalog = WindowsSettingsCatalog.Defaults();
-        try { if (!preview) catalog = store.Load(); }
-        catch (Exception ex) { SettingsMessage = $"Không đọc được cấu hình: {ex.Message} Đang dùng mặc định; file cũ chưa bị ghi đè."; }
-        try { if (!preview) windowsCatalog = store.LoadWindows(); }
-        catch (Exception ex) { SettingsMessage = $"Không đọc được thiết lập: {ex.Message} Đang dùng mặc định; file cũ chưa bị ghi đè."; }
+        var loadSettings = settingsDirectory != null || (!preview && IsDeveloperEdition);
+        try { if (loadSettings) catalog = store.Load(requireSettings); }
+        catch (Exception ex) { if (requireSettings) throw; SettingsMessage = $"Không đọc được cấu hình: {ex.Message} Đang dùng mặc định; file cũ chưa bị ghi đè."; }
+        try { if (loadSettings) windowsCatalog = store.LoadWindows(requireSettings); }
+        catch (Exception ex) { if (requireSettings) throw; SettingsMessage = $"Không đọc được thiết lập: {ex.Message} Đang dùng mặc định; file cũ chưa bị ghi đè."; }
         InstallCommand = new RelayCommand(async () => await InstallAsync(), () => !IsBusy && (Apps.Count > 0 || WindowsOptions.Count > 0));
         CancelCommand = new RelayCommand(() => { cancellation?.Cancel(); Summary = "Đang hủy hàng đợi · chờ bộ cài đang chạy kết thúc…"; }, () => IsBusy);
-        SaveCommand = new RelayCommand(Save, () => !IsBusy && IsCurrentDirty && !HasValidationError);
-        DiscardCommand = new RelayCommand(DiscardCurrent, () => !IsBusy && IsCurrentDirty);
-        AddCommand = new RelayCommand(() => { AppSearch = ""; var item = new AppDefinition { Name = "Ứng dụng mới" }; EditableApps.Add(item); SelectedApp = item; }, () => !IsBusy);
-        DeleteCommand = new RelayCommand(DeleteApp, () => !IsBusy && SelectedApp != null);
-        AddWindowsCommand = new RelayCommand(() => { WindowsSearch = ""; var item = new WindowsSettingDefinition { Name = "Thiết lập mới" }; EditableWindows.Add(item); SelectedWindows = item; }, () => !IsBusy);
-        DeleteWindowsCommand = new RelayCommand(DeleteWindows, () => !IsBusy && SelectedWindows != null);
+        SaveCommand = new RelayCommand(Save, () => IsDeveloperEdition && !IsBusy && IsCurrentDirty && !HasValidationError);
+        DiscardCommand = new RelayCommand(DiscardCurrent, () => IsDeveloperEdition && !IsBusy && IsCurrentDirty);
+        AddCommand = new RelayCommand(() => { AppSearch = ""; var item = new AppDefinition { Name = "Ứng dụng mới" }; EditableApps.Add(item); SelectedApp = item; }, () => IsDeveloperEdition && !IsBusy);
+        DeleteCommand = new RelayCommand(DeleteApp, () => IsDeveloperEdition && !IsBusy && SelectedApp != null);
+        AddWindowsCommand = new RelayCommand(() => { WindowsSearch = ""; var item = new WindowsSettingDefinition { Name = "Thiết lập mới" }; EditableWindows.Add(item); SelectedWindows = item; }, () => IsDeveloperEdition && !IsBusy);
+        DeleteWindowsCommand = new RelayCommand(DeleteWindows, () => IsDeveloperEdition && !IsBusy && SelectedWindows != null);
         CopySerialCommand = new RelayCommand(CopySerial, () => CanCopySerial);
         OpenDriverSupportCommand = new RelayCommand(OpenDriverSupport, () => HasDriverUrl);
         RefreshDriverInfoCommand = new RelayCommand(() => _ = LoadDriverInfoAsync(true), () => !IsDriverLoading);
@@ -209,7 +216,7 @@ public sealed class MainViewModel : Observable
         OptimizeCommand = new RelayCommand(async () => await RunOptimizePreviewAsync(), () => !IsBusy);
         RebuildWindows();
         RebuildRows();
-        CopyToEditor();
+        if (IsDeveloperEdition) CopyToEditor();
     }
     private void Refresh() { Raise(nameof(SelectionText)); InstallCommand?.Refresh(); CancelCommand?.Refresh(); SaveCommand?.Refresh(); DiscardCommand?.Refresh(); AddCommand?.Refresh(); DeleteCommand?.Refresh(); AddWindowsCommand?.Refresh(); DeleteWindowsCommand?.Refresh(); OptimizeCommand?.Refresh(); }
     private void RefreshDriverCommands() { CopySerialCommand?.Refresh(); OpenDriverSupportCommand?.Refresh(); RefreshDriverInfoCommand?.Refresh(); }
@@ -411,20 +418,20 @@ public sealed class MainViewModel : Observable
             if (SettingsTab == 0)
             {
                 Catalog.Validate(EditableApps);
-                if (!preview) store.Save(EditableApps);
+                if (settingsWritable) store.Save(EditableApps);
                 catalog = JsonSerializer.Deserialize<List<AppDefinition>>(JsonSerializer.Serialize(EditableApps))!;
             }
             else
             {
                 WindowsSettingsCatalog.Validate(EditableWindows);
-                if (!preview) store.SaveWindows(EditableWindows);
+                if (settingsWritable) store.SaveWindows(EditableWindows);
                 windowsCatalog = JsonSerializer.Deserialize<List<WindowsSettingDefinition>>(JsonSerializer.Serialize(EditableWindows))!;
                 // All saved definitions participate in the next explicitly confirmed run.
                 RebuildWindows();
             }
             RebuildRows();
             var section = SettingsTab == 0 ? "ứng dụng" : "các thiết lập";
-            SettingsMessage = preview ? $"Đã áp dụng {section} trong bản xem thử; không ghi cấu hình xuống máy." : $"Đã lưu {section} tại {store.DirectoryPath}";
+            SettingsMessage = settingsWritable ? $"Đã lưu {section} tại {store.DirectoryPath}" : $"Đã áp dụng {section} trong bản xem thử; không ghi cấu hình xuống máy.";
             RefreshSettingsState();
         }
         catch (Exception ex) { SettingsMessage = "Chưa lưu: " + ex.Message; }

@@ -11,7 +11,9 @@
     <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>MiniApps</AssemblyName>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
+    <MiniAppsEdition Condition="'$(MiniAppsEdition)' == ''">Developer</MiniAppsEdition>
+    <DefineConstants Condition="'$(MiniAppsEdition)' == 'Developer'">$(DefineConstants);MINIAPPS_DEVELOPER</DefineConstants>
   </PropertyGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />

@@ -1,4 +1,4 @@
-# MiniApps Desktop — WPF v0.2.0 / dual runtime
+# MiniApps Desktop — WPF v0.3.0 / dual runtime
 
 Bản nâng cấp độc lập trong `WPF/`; không sửa hoặc thực thi `../Setup.ps1`.
 
@@ -6,27 +6,27 @@ Bản nâng cấp độc lập trong `WPF/`; không sửa hoặc thực thi `../
 
 - C# / XAML, MVVM, WPF control chuẩn được style nhẹ. Không WebView2, không font icon, không thư viện UI bên ngoài.
 - Nền sáng dịu `#F3F4F6`, sidebar `#ECEEF1`, panel `#FAFAFB`, xanh nhấn `#3B6EA8`.
-- Sidebar: **Install app**, **Optimize Windows**, **Driver**, **Setting**.
+- Sidebar Developer: **Install app**, **Optimize Windows**, **Driver**, **Setting**. Bản Public qua `irm` chỉ có **Install app**, **Optimize Windows** và **Driver**.
 - Install app: một nút Cài đặt mở hộp thoại chỉ có “Bạn muốn sử dụng ứng dụng nào:” với **Office 2024 / WPS / Cancel** (cả bản thật và preview). Cancel, Esc hoặc đóng hộp thoại không tải/chạy tác vụ nào. Chọn Office/WPS bắt đầu toàn bộ catalog tương ứng, không có checkbox ứng dụng hay xác nhận thừa lần hai. Danh sách chỉ hiện sau khi bắt đầu dưới dạng lưới ba cột; mỗi bản ghi có tên, trạng thái và tiến trình tải/cài. Bộ cài không có % dùng thanh chạy không xác định. Log trong phiên.
 - Driver: đọc Host, hãng, model và serial bằng CIM của Windows (registry làm phương án dự phòng). Serial có thể sao chép. Tên hãng được chuẩn hóa và ánh xạ tới URL HTTPS hỗ trợ chính thức của Dell, HP, Lenovo, ASUS, Acer, MSI, Microsoft Surface hoặc Samsung; hãng chưa biết không được tự suy đoán URL. Nút mở trang do người dùng chủ động bấm; MiniApps chưa tự tải/cài driver và không gửi thông tin máy lên dịch vụ riêng.
 - Install app không hiển thị danh sách hoặc checkbox thiết lập Windows trước khi chạy. Toàn bộ thiết lập đã lưu chạy mặc định sau xác nhận Office/WPS, **ngoại trừ Debloat** đã được tách khỏi luồng Install. Bộ lọc nhận diện Debloat theo cả ID và Action để cấu hình lưu cũ cũng không đưa tác vụ này vào lượt cài. Trong tiến trình, các tác vụ còn lại được tổng hợp thành một bản ghi **Windows Setting**; bấm vào bản ghi để xổ/thu danh sách từng thiết lập, trạng thái và phần trăm riêng. PowerShell không cung cấp tiến độ nội bộ nên mỗi mục chuyển từ 0% sang 100% khi kết thúc. Cancel không chạy gì. Quản lý danh sách ở Setting → Các thiết lập; lưu cấu hình chưa chạy tác vụ.
 - Optimize Windows hiện là **preview giao diện** với bốn nhóm: gỡ ứng dụng thừa, quyền riêng tư & quảng cáo, Copilot & AI, giao diện Windows. Nút Tối ưu Windows chỉ mô phỏng trạng thái và tiến trình trong bộ nhớ; không gọi PowerShell/DeploymentService, không tải công cụ, không sửa Registry và không gỡ ứng dụng.
-- Setting có hai tab **Ứng dụng** và **Thiết lập Windows**, hiển thị số lượng mục, tìm kiếm riêng và hỗ trợ thêm/sửa/xóa. Danh sách nằm bên trái, biểu mẫu chỉnh sửa nằm bên phải. Trạng thái **Đã lưu/Chưa lưu thay đổi**, **Hủy thay đổi**, **Lưu thay đổi** và `Ctrl+S` chỉ tác động tab đang mở; đổi tab vẫn giữ bản nháp và bản nháp chưa lưu không ảnh hưởng lượt cài.
+- Setting chỉ có trong edition Developer và có hai tab **Ứng dụng** và **Thiết lập Windows**, hiển thị số lượng mục, tìm kiếm riêng và hỗ trợ thêm/sửa/xóa. Danh sách nằm bên trái, biểu mẫu chỉnh sửa nằm bên phải. Trạng thái **Đã lưu/Chưa lưu thay đổi**, **Hủy thay đổi**, **Lưu thay đổi** và `Ctrl+S` chỉ tác động tab đang mở; đổi tab vẫn giữ bản nháp và bản nháp chưa lưu không ảnh hưởng lượt cài.
 - Ứng dụng: giao diện Setting chỉ gồm tên, URL và tham số cài đặt. MiniApps tự nhận diện ứng dụng đã cài từ tên hiển thị trong Windows và quy tắc tích hợp cho catalog mặc định; người dùng không phải cấu hình regex. SHA-256 và nhóm Office/WPS hiện có được giữ trong cấu hình nội bộ để bảo toàn catalog. Ứng dụng thêm mới là ứng dụng thông thường. Xóa khỏi danh sách không gỡ app đã cài. Có thể lưu danh sách rỗng; xóa Office/WPS nghĩa là suite đó không còn gói nào trong lượt chạy.
 - Thiết lập Windows: tên, mô tả tác động và trình soạn **Câu lệnh PowerShell** lớn, dùng font Consolas. Debloat cũ hiển thị cảnh báo đã tách khỏi Install app và Optimize còn ở preview. Engine chạy đúng nội dung Script đã lưu, không chuyển sang tác vụ tích hợp khác. Xóa không hoàn tác hệ thống. Mọi mục đã lưu đều có trong lượt tiếp theo; không có trạng thái chọn/bỏ chọn từng lượt. Cấu hình cũ chỉ lưu Action được bổ sung câu lệnh mặc định trong bộ nhớ; chỉ ghi xuống đĩa khi Lưu. Nội dung script đã sửa được giữ nguyên.
-- Settings tại `%LocalAppData%\MiniApps\apps.json` và `windows.json`, không bị bootstrap xóa. File mới lưu `SchemaVersion`, danh sách cấu hình và ID mặc định đã xóa. Mảng JSON từ bản cũ được đọc như schema 1; Info.exe của schema 2 được thêm trong bộ nhớ đúng một lần, còn mục cũ đã xóa và nội dung đã sửa được bảo toàn khi lưu. Không tự ghi đè file lỗi hoặc schema mới hơn khi khởi động.
+- Cấu hình phát hành nằm trong `WPF/ReleaseConfig/apps.json` và `windows.json`. Developer đọc/ghi hai file bằng thao tác lưu atomic; Public chỉ đọc bản sao nằm trong gói đã xác minh và không đọc cấu hình `%LocalAppData%` của máy khách. File lưu `SchemaVersion`, danh sách cấu hình và ID mặc định đã xóa; cấu hình thiếu, lỗi hoặc schema mới hơn làm Public dừng trước khi cài.
 - Script tùy chỉnh là **mã thực thi tin cậy do người dùng cấu hình**, chạy với quyền Admin trong Windows PowerShell 5.1 sau lựa chọn và xác nhận Office/WPS. Không chạy khi lưu hoặc preview. Không dùng Read-Host/prompt; kiểm tra `$LASTEXITCODE` sau lệnh native và dùng `throw`/`exit` khác 0 khi lỗi. Script ghi UTF-8 BOM trong thư mục phiên và chạy như file, không ghép vào chuỗi lệnh. Không tự phân tích tác động hay bảo đảm rollback của script người dùng; script lỗi cú pháp sẽ báo khi chạy.
 
-## Kế hoạch tách bản Developer và Public
+## Bản Developer và Public
 
-> Trạng thái: đã chốt thiết kế, chưa triển khai trong `v0.2.0` hiện tại.
+> Trạng thái: đã triển khai từ `v0.3.0`.
 
 - **Developer** chỉ dùng trên máy phát triển, build `net48` với `MiniAppsEdition=Developer`. Sidebar có đủ **Install app**, **Optimize Windows**, **Driver** và **Setting**. Setting tiếp tục quản lý hai nhóm **Ứng dụng** và **Thiết lập Windows**.
 - **Public** là bản người dùng nhận qua `irm`, build với `MiniAppsEdition=Public`. Sidebar chỉ có **Install app**, **Optimize Windows** và **Driver**. ViewModel cũng từ chối điều hướng tới Setting và vô hiệu hóa toàn bộ lệnh thêm/sửa/xóa/lưu; bản Public không có tham số dòng lệnh để bật lại Setting.
 - Cấu hình phát hành chuẩn nằm trong `WPF/ReleaseConfig/apps.json` và `WPF/ReleaseConfig/windows.json`. Bản Developer đọc/ghi hai file này; bản Public chỉ đọc bản sao đã được đóng gói cùng ứng dụng và không dùng cấu hình `%LocalAppData%` của máy khách.
-- `Preview.ps1 -Developer` sẽ build/mở đúng bản net48 Developer và truyền đường dẫn cấu hình trong workspace. `Publish.ps1` luôn build Public, kiểm tra schema, ID trùng, URL HTTPS, script rỗng và SHA-256 trước khi tạo gói; cấu hình thiếu hoặc không hợp lệ làm publish thất bại.
+- `Preview.ps1 -Developer` build/mở đúng bản net48 Developer và truyền đường dẫn cấu hình trong workspace. `Publish.ps1` luôn build Public, kiểm tra schema, ID trùng, URL HTTPS, script rỗng và SHA-256 trước khi tạo gói; cấu hình thiếu hoặc không hợp lệ làm publish thất bại.
 - File cấu hình được ghi atomic. Bản Public dừng trước khi cài nếu cấu hình đóng gói thiếu hoặc hỏng, thay vì âm thầm dùng catalog khác.
-- Giai đoạn đầu chỉ triển khai và kiểm thử luồng Developer/Public trên `net48`. Mã nguồn dual-runtime vẫn được giữ; đóng gói/cập nhật net10 thực hiện ở giai đoạn phát hành sau.
+- Luồng chỉnh cấu hình được triển khai và kiểm thử trên `net48`. Mã nguồn dual-runtime vẫn dùng chung; cả gói net48 và fallback net10 phát hành đều được build dưới edition Public.
 
 Điều kiện nghiệm thu: Developer có bốn mục sidebar và lưu được cấu hình; Public chỉ có ba mục, không thể truy cập Setting bằng UI hoặc bằng cách gán trang; Public không tạo/sửa cấu hình trong `%LocalAppData%`; cấu hình Developer đã lưu xuất hiện đúng trong bản Public; các test Install app, tiến trình, Driver và Optimize hiện tại vẫn đạt.
 
@@ -39,6 +39,7 @@ dotnet build WPF/MiniApps/MiniApps.csproj -c Release
 ./WPF/Publish.ps1
 ./WPF/Preview.ps1 -Target net48
 ./WPF/Preview.ps1 -Target net10
+./WPF/Preview.ps1 -Target net48 -Developer # mở Setting và WPF/ReleaseConfig
 dotnet build WPF/MiniApps.Tests -c Release
 ./WPF/MiniApps.Tests/bin/Release/net48/MiniApps.Tests.exe
 dotnet ./WPF/MiniApps.Tests/bin/Release/net10.0-windows/MiniApps.Tests.dll
@@ -52,7 +53,7 @@ Mở `MiniApps.exe` trực tiếp không tự xin quyền Admin, cho phép xem g
 ## Đóng gói / phát hành
 
 ```powershell
-./WPF/Publish.ps1 -Runtime win-x64 -Version 0.2.0
+./WPF/Publish.ps1 -Runtime win-x64 -Version 0.3.0
 # Nếu dotnet không có trong PATH:
 ./WPF/Publish.ps1 -Dotnet 'C:\path\to\dotnet.exe'
 ```
@@ -63,9 +64,9 @@ Mở `MiniApps.exe` trực tiếp không tự xin quyền Admin, cho phép xem g
 - `MiniApps-net10-win-x64.zip` và `.sha256`: gói self-contained cho máy thiếu Framework 4.8.
 - `manifest-win-x64.json`: schema 2 chứa đúng hai asset, target, kiến trúc, URL release cố định, kích thước và checksum.
 
-Năm file dành cho cùng GitHub Release **v0.2.0** trong `mson-ssh/miniapp`: hai ZIP, hai checksum và một manifest. Bản đầu chỉ hỗ trợ x64; bootstrap báo rõ với x86/ARM64. Script không tự upload/push/release. Gói hiện chưa ký Authenticode; SHA-256 chống sai/hỏng nội dung, không thay thế chữ ký của nhà phát hành.
+Năm file dành cho cùng GitHub Release **v0.3.0** trong `mson-ssh/miniapp`: hai ZIP, hai checksum và một manifest. Bản đầu chỉ hỗ trợ x64; bootstrap báo rõ với x86/ARM64. Script không tự upload/push/release. Gói hiện chưa ký Authenticode; SHA-256 chống sai/hỏng nội dung, không thay thế chữ ký của nhà phát hành.
 
-Sau khi source bootstrap và release assets đã được phát hành, bootstrap dùng URL release `v0.2.0` cố định để manifest và các gói luôn thuộc cùng một phiên bản:
+Sau khi source bootstrap và release assets đã được phát hành, bootstrap dùng URL release `v0.3.0` cố định để manifest và các gói luôn thuộc cùng một phiên bản:
 
 ```powershell
 irm https://raw.githubusercontent.com/mson-ssh/miniapp/main/WPF/bootstrap.ps1 | iex

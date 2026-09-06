@@ -1,12 +1,16 @@
 param(
     [ValidateSet('win-x64')][string]$Runtime = 'win-x64',
-    [ValidatePattern('^[a-zA-Z0-9._-]+$')][string]$Version = '0.2.0',
+    [ValidatePattern('^[a-zA-Z0-9._-]+$')][string]$Version = '0.3.0',
     [string]$Dotnet = 'dotnet'
 )
 $ErrorActionPreference = 'Stop'
 $artifacts = Join-Path $PSScriptRoot 'artifacts'
 New-Item -Path $artifacts -ItemType Directory -Force | Out-Null
 $project = Join-Path $PSScriptRoot 'MiniApps/MiniApps.csproj'
+$releaseConfig = Join-Path $PSScriptRoot 'ReleaseConfig'
+if (-not (Test-Path -LiteralPath (Join-Path $releaseConfig 'apps.json')) -or -not (Test-Path -LiteralPath (Join-Path $releaseConfig 'windows.json'))) {
+    throw 'ReleaseConfig is incomplete. Run Preview.ps1 -Developer once and save the reviewed configuration.'
+}
 $assets = @()
 
 function New-MiniAppsPackage {
@@ -17,7 +21,7 @@ function New-MiniAppsPackage {
     )
     $stage = Join-Path $artifacts ("publish-$Target-" + [Guid]::NewGuid().ToString('N'))
     New-Item -Path $stage -ItemType Directory -Force | Out-Null
-    $arguments = @('publish', $project, '-c', 'Release', '-f', $Framework, '-p:PlatformTarget=x64', "-p:Version=$Version", '-p:DebugType=None', '-p:DebugSymbols=false', '-o', $stage)
+    $arguments = @('publish', $project, '-c', 'Release', '-f', $Framework, '-p:PlatformTarget=x64', '-p:MiniAppsEdition=Public', "-p:Version=$Version", '-p:DebugType=None', '-p:DebugSymbols=false', '-o', $stage)
     if ($SelfContained) {
         $arguments += @('-r', $Runtime, '--self-contained', 'true', '-p:PublishSingleFile=false', '-p:PublishTrimmed=false')
     } else {
@@ -25,6 +29,11 @@ function New-MiniAppsPackage {
     }
     & $Dotnet @arguments
     if ($LASTEXITCODE -ne 0) { throw "Publish failed for $Target." }
+
+    $packagedConfig = Join-Path $stage 'ReleaseConfig'
+    Copy-Item -LiteralPath $releaseConfig -Destination $packagedConfig -Recurse
+    $validation = Start-Process -FilePath (Join-Path $stage 'MiniApps.exe') -ArgumentList @('--validate-config', '--config-root', ('"' + $packagedConfig + '"')) -Wait -PassThru -WindowStyle Hidden
+    if ($validation.ExitCode -ne 0) { throw "ReleaseConfig validation failed for $Target." }
 
     $asset = "MiniApps-$Target-$Runtime.zip"
     $zip = Join-Path $artifacts $asset

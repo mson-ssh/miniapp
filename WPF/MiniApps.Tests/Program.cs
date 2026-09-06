@@ -76,6 +76,21 @@ try
         var path = Path.Combine(dir, "windows.json"); var json = """{"SchemaVersion":99,"Items":[],"RemovedDefaultIds":[]}""";
         File.WriteAllText(path, json); Reject(() => new SettingsStore(dir).LoadWindows()); Assert(File.ReadAllText(path) == json);
     });
+    Check("Public edition hides and locks Setting", () => {
+        var vm = new MainViewModel(true, developerEdition: false);
+        Assert(!vm.IsDeveloperEdition && !vm.IsSetting && vm.Page == 0);
+        vm.Page = 3;
+        Assert(vm.Page == 0 && !vm.IsSetting);
+        Assert(vm.EditableApps.Count == 0 && vm.EditableWindows.Count == 0);
+        Assert(!vm.AddCommand.CanExecute(null) && !vm.AddWindowsCommand.CanExecute(null) && !vm.SaveCommand.CanExecute(null));
+        vm.AddCommand.Execute(null); vm.AddWindowsCommand.Execute(null); vm.SaveCommand.Execute(null);
+        Assert(vm.EditableApps.Count == 0 && vm.EditableWindows.Count == 0);
+    });
+    Check("Required packaged settings fail closed", () => {
+        var missing = new SettingsStore(Path.Combine(root, "missing-public"));
+        Reject(() => missing.Load(required: true));
+        Reject(() => missing.LoadWindows(required: true));
+    });
     Check("Atomic settings round trip", () => { var store = new SettingsStore(root); var apps = Catalog.Defaults(); apps.Add(new() { Name = "Test", Url = "https://example.com/test.exe" }); store.Save(apps); Assert(store.Load().Count == 13); });
     Check("Invalid settings cannot overwrite saved config", () => { var store = new SettingsStore(root); var apps = Catalog.Defaults(); apps[0].Url = "bad"; Reject(() => store.Save(apps)); Assert(store.Load().Count == 13); });
     Check("Windows settings persist add/edit/delete independently of apps", () => {
@@ -499,6 +514,16 @@ var renderThread = new Thread(() =>
         if (vm.SystemTasks.Count != 1 || vm.SystemTasks[0].Name != "Windows Setting" || vm.SystemTasks[0].Progress != 100 || vm.SystemTasks[0].Status != "Hoàn tất") throw new Exception("Windows settings must be represented by one completed summary row.");
         Console.WriteLine("PASS each run asks again; Office, Cancel and WPS catalogs");
         window.Close();
+        var publicVm = new MainViewModel(true, developerEdition: false);
+        var publicWindow = new MiniApps.MainWindow(publicVm) { ShowInTaskbar = false, Left = -20000, Top = -20000 };
+        publicWindow.Show(); publicWindow.UpdateLayout();
+        var navigation = (System.Windows.Controls.ListBox)publicWindow.FindName("NavigationList");
+        if (navigation.Items.Count != 4 || ((System.Windows.Controls.ListBoxItem)navigation.Items[3]).Visibility != System.Windows.Visibility.Collapsed)
+            throw new Exception("Public navigation must hide Setting.");
+        publicVm.Page = 3;
+        if (publicVm.Page != 0 || publicVm.IsSetting) throw new Exception("Public navigation reached Setting.");
+        publicWindow.Close();
+        Console.WriteLine("PASS Public WPF navigation hides and blocks Setting");
         application.Shutdown();
     }
     catch (Exception ex) { renderError = ex; }

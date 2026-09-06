@@ -7,9 +7,10 @@ public sealed class SettingsStore(string? directory = null)
     private const int AppsSchemaVersion = 1;
     private const int WindowsSchemaVersion = 2;
     public string DirectoryPath { get; } = directory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MiniApps");
-    public List<AppDefinition> Load()
+    public List<AppDefinition> Load(bool required = false)
     {
         var path = Path.Combine(DirectoryPath, "apps.json");
+        if (required && !File.Exists(path)) throw new FileNotFoundException("Thiếu cấu hình ứng dụng đã đóng gói.", path);
         if (!File.Exists(path)) return Catalog.Defaults();
         var apps = Read<AppDefinition>(path, AppsSchemaVersion).Items;
         Catalog.Validate(apps);
@@ -23,9 +24,10 @@ public sealed class SettingsStore(string? directory = null)
         var removed = Catalog.Defaults().Where(x => !present.Contains(x.Id)).Select(x => x.Id).ToList();
         Write("apps.json", new SettingsEnvelope<AppDefinition>(AppsSchemaVersion, items, removed));
     }
-    public List<WindowsSettingDefinition> LoadWindows()
+    public List<WindowsSettingDefinition> LoadWindows(bool required = false)
     {
         var path = Path.Combine(DirectoryPath, "windows.json");
+        if (required && !File.Exists(path)) throw new FileNotFoundException("Thiếu cấu hình Windows đã đóng gói.", path);
         if (!File.Exists(path)) return WindowsSettingsCatalog.Defaults();
         var saved = Read<WindowsSettingDefinition>(path, WindowsSchemaVersion, legacyVersion: 1);
         var settings = saved.Items;
