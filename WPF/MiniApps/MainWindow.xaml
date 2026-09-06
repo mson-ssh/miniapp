@@ -1,0 +1,276 @@
+<Window x:Class="MiniApps.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="MiniApps" Width="1120" Height="810" MinWidth="940" MinHeight="660" WindowStartupLocation="CenterScreen"
+        Background="#F3F4F6" Foreground="{StaticResource Ink}" FontFamily="Segoe UI" FontSize="13" UseLayoutRounding="True" Closing="OnClosing">
+  <Grid Background="#F3F4F6">
+    <Grid.ColumnDefinitions><ColumnDefinition Width="202" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+    <Border Background="#ECEEF1" BorderBrush="#DFE3E9" BorderThickness="0,0,1,0">
+      <Grid Margin="14,28,14,20">
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <StackPanel Margin="14,0,0,32"><TextBlock Text="MiniApps" FontSize="23" FontWeight="SemiBold" /><TextBlock Text="WINDOWS SETUP" FontSize="10" Foreground="{StaticResource Muted}" Margin="1,7,0,0" /></StackPanel>
+        <ListBox Grid.Row="1" SelectedIndex="{Binding Page}" Background="Transparent" BorderThickness="0" AutomationProperties.Name="Điều hướng">
+          <ListBox.Resources><Style TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="14,13" /><Setter Property="Margin" Value="0,3" /><Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
+              <Border x:Name="Row" CornerRadius="5" Background="Transparent"><Grid>
+                <Border x:Name="Mark" Width="3" Height="18" Background="Transparent" HorizontalAlignment="Left" CornerRadius="2" />
+                <ContentPresenter Margin="{TemplateBinding Padding}" />
+              </Grid></Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsSelected" Value="True"><Setter TargetName="Row" Property="Background" Value="#DFE6EF" /><Setter TargetName="Mark" Property="Background" Value="{StaticResource Accent}" /><Setter Property="FontWeight" Value="SemiBold" /></Trigger>
+                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Row" Property="Opacity" Value="0.75" /></Trigger>
+                <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource Accent}" /><Setter TargetName="Row" Property="BorderThickness" Value="1" /></Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate></Setter.Value></Setter>
+          </Style></ListBox.Resources>
+          <ListBoxItem Content="Install app" />
+          <ListBoxItem Content="Optimize Windows" />
+          <ListBoxItem Content="Driver" />
+          <ListBoxItem Content="Setting" IsEnabled="{Binding DataContext.IsIdle, RelativeSource={RelativeSource AncestorType=ListBox}}" />
+        </ListBox>
+        <StackPanel Grid.Row="2" Margin="14,0,0,0"><TextBlock Text="Gọn nhẹ. Sẵn sàng." FontSize="12" Foreground="{StaticResource Muted}" /><TextBlock Text="{Binding RuntimeLabel}" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,6,0,0" TextWrapping="Wrap" /></StackPanel>
+      </Grid>
+    </Border>
+    <Grid Grid.Column="1" Margin="32,28,32,22">
+      <Grid Visibility="{Binding IsInstall, Converter={StaticResource BoolVisibility}}">
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <StackPanel Margin="0,0,0,22"><TextBlock Text="Install app" FontSize="28" FontWeight="SemiBold" /><TextBlock Text="Ứng dụng cần thiết, Windows theo cách của bạn." Foreground="{StaticResource Muted}" Margin="0,7,0,0" /><TextBlock Text="{Binding Machine}" Style="{StaticResource Caption}" Margin="0,13,0,0" /></StackPanel>
+        <ScrollViewer x:Name="InstallScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,6,0">
+          <StackPanel>
+            <Border Style="{StaticResource Panel}" Visibility="{Binding IsReady, Converter={StaticResource BoolVisibility}}">
+              <StackPanel>
+                <TextBlock Text="Sẵn sàng cài đặt" FontSize="21" FontWeight="SemiBold" />
+                <TextBlock Text="Một lần bấm để cài toàn bộ ứng dụng đã cấu hình. Tiến trình từng ứng dụng sẽ xuất hiện khi bắt đầu." Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,10,0,28" />
+                <TextBlock Text="Khi bấm Cài đặt, bạn sẽ được hỏi chọn Office 2024 hoặc WPS." Style="{StaticResource Caption}" TextWrapping="Wrap" />
+              </StackPanel>
+            </Border>
+            <Border Style="{StaticResource Panel}" Visibility="{Binding HasStarted, Converter={StaticResource BoolVisibility}}">
+              <StackPanel>
+                <TextBlock Text="Tiến trình cài đặt" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,18" />
+                <ItemsControl ItemsSource="{Binding ProgressRows}" x:Name="ProgressList">
+                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate><DataTemplate>
+                    <Border BorderBrush="#E1E5EA" BorderThickness="1" CornerRadius="5" Padding="12" Margin="0,0,8,8" MouseLeftButtonUp="OnProgressCardClick">
+                      <Border.Style><Style TargetType="Border"><Setter Property="Background" Value="#FFFFFF" /><Style.Triggers><DataTrigger Binding="{Binding IsWindowsSummary}" Value="True"><Setter Property="Cursor" Value="Hand" /><Setter Property="Background" Value="#F7FAFE" /></DataTrigger></Style.Triggers></Style></Border.Style>
+                      <Grid MinHeight="67">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" Margin="0,0,0,9" />
+                        <Grid Grid.Row="1" Margin="0,0,0,8"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                          <TextBlock Text="{Binding Status}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Status}" Margin="0,0,10,0" />
+                          <TextBlock Grid.Column="1" Text="{Binding ProgressText}" Style="{StaticResource Caption}" HorizontalAlignment="Right" />
+                        </Grid>
+                        <ProgressBar Grid.Row="2" Value="{Binding Progress, Mode=OneWay}" IsIndeterminate="{Binding IsInstalling}" Height="4" BorderThickness="0" Background="#E8EBF0" Foreground="{StaticResource Accent}" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate></ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Border Background="#F3F5F8" BorderBrush="#DDE3EA" BorderThickness="1" CornerRadius="5" Padding="14" Margin="0,4,8,10" Visibility="{Binding IsWindowsDetailsVisible, Converter={StaticResource BoolVisibility}}">
+                  <StackPanel>
+                    <TextBlock Text="Các thiết lập Windows" FontWeight="SemiBold" Margin="0,0,0,12" />
+                    <ItemsControl ItemsSource="{Binding WindowsTaskDetails}" x:Name="WindowsTaskDetailsList">
+                      <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate><DataTemplate>
+                        <Border Background="#FFFFFF" BorderBrush="#E1E5EA" BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,0,8,8">
+                          <StackPanel>
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                            <Grid Margin="0,8,0,7"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                              <TextBlock Text="{Binding Status}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Status}" Margin="0,0,8,0" />
+                              <TextBlock Grid.Column="1" Text="{Binding Progress, StringFormat={}{0:0}%}" Style="{StaticResource Caption}" />
+                            </Grid>
+                            <ProgressBar Value="{Binding Progress, Mode=OneWay}" Height="3" BorderThickness="0" Background="#E8EBF0" Foreground="{StaticResource Accent}" />
+                          </StackPanel>
+                        </Border>
+                      </DataTemplate></ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </Border>
+                <TextBlock Text="Phần trăm thể hiện tiến trình tải. Khi bộ cài không cung cấp %, MiniApps hiển thị trạng thái đang cài." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,14,0,0" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+        <Border Grid.Row="2" BorderBrush="#DDE1E7" BorderThickness="0,1,0,0" Padding="0,16,0,0" Margin="0,12,0,0">
+          <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <StackPanel Margin="0,0,16,0"><TextBlock Text="{Binding SelectionText}" FontWeight="SemiBold" /><TextBlock Text="{Binding Summary}" Style="{StaticResource Caption}" Margin="0,5,0,7" TextWrapping="Wrap" /><ProgressBar Value="{Binding Overall, Mode=OneWay}" Height="3" Background="#E0E5EB" Foreground="{StaticResource Accent}" BorderThickness="0" /></StackPanel>
+            <Button Grid.Column="1" Content="Dừng hàng đợi" Command="{Binding CancelCommand}" Visibility="{Binding IsBusy, Converter={StaticResource BoolVisibility}}" VerticalAlignment="Center" Margin="0,0,10,0" />
+            <Button Grid.Column="2" Content="Cài đặt" Command="{Binding InstallCommand}" Style="{StaticResource Primary}" Width="120" VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+      </Grid>
+      <Grid Visibility="{Binding IsOptimize, Converter={StaticResource BoolVisibility}}">
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <StackPanel Margin="0,0,0,22">
+          <TextBlock Text="Optimize Windows" FontSize="28" FontWeight="SemiBold" />
+          <TextBlock Text="Dọn gọn Windows theo cấu hình an toàn đã được MiniApps xác định." Foreground="{StaticResource Muted}" Margin="0,7,0,0" />
+          <Border Background="#EEF4FA" BorderBrush="#D8E3EE" BorderThickness="1" CornerRadius="5" Padding="12,8" HorizontalAlignment="Left" Margin="0,15,0,0">
+            <TextBlock Text="Preview — không thay đổi hệ thống" Foreground="#365A78" FontWeight="SemiBold" />
+          </Border>
+        </StackPanel>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,6,0">
+          <StackPanel>
+            <Border Style="{StaticResource Panel}">
+              <StackPanel>
+                <TextBlock Text="Các nhóm tối ưu" FontSize="20" FontWeight="SemiBold" />
+                <TextBlock Text="Bản xem thử chỉ mô phỏng thứ tự và trạng thái. Không tải công cụ, không chạy PowerShell, không sửa Registry và không gỡ ứng dụng." Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,9,0,22" />
+                <ItemsControl ItemsSource="{Binding OptimizeTasks}" x:Name="OptimizeTaskList">
+                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="2" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate><DataTemplate>
+                    <Border Background="#FAFBFC" BorderBrush="#E1E5EA" BorderThickness="1" CornerRadius="5" Padding="16" Margin="0,0,10,10">
+                      <Grid MinHeight="108">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Grid.Row="1" Text="{Binding Description}" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,7,0,14" />
+                        <Grid Grid.Row="2" Margin="0,0,0,7"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                          <TextBlock Text="{Binding Status}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Status}" Margin="0,0,10,0" />
+                          <TextBlock Grid.Column="1" Text="{Binding Progress, StringFormat={}{0:0}%}" Style="{StaticResource Caption}" />
+                        </Grid>
+                        <ProgressBar Grid.Row="3" Value="{Binding Progress, Mode=OneWay}" Height="4" BorderThickness="0" Background="#E8EBF0" Foreground="{StaticResource Accent}" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate></ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+        <Border Grid.Row="2" BorderBrush="#DDE1E7" BorderThickness="0,1,0,0" Padding="0,16,0,0" Margin="0,12,0,0">
+          <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <StackPanel Margin="0,0,18,0"><TextBlock Text="{Binding OptimizeSummary}" FontWeight="SemiBold" TextWrapping="Wrap" /><ProgressBar Value="{Binding OptimizeOverall, Mode=OneWay}" Height="3" Background="#E0E5EB" Foreground="{StaticResource Accent}" BorderThickness="0" Margin="0,9,0,0" /></StackPanel>
+            <Button Grid.Column="1" Content="Tối ưu Windows" Command="{Binding OptimizeCommand}" Style="{StaticResource Primary}" Width="145" VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+      </Grid>
+      <Grid Visibility="{Binding IsDriver, Converter={StaticResource BoolVisibility}}">
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+        <Grid Margin="0,0,0,22">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+          <StackPanel><TextBlock Text="Driver" FontSize="28" FontWeight="SemiBold" /><TextBlock Text="Thông tin thiết bị và hỗ trợ driver chính hãng." Foreground="{StaticResource Muted}" Margin="0,7,0,0" /></StackPanel>
+          <Button Grid.Column="1" Content="Đọc lại thông tin" Command="{Binding RefreshDriverInfoCommand}" VerticalAlignment="Center" AutomationProperties.Name="Đọc lại thông tin máy" />
+        </Grid>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,6,0">
+          <StackPanel>
+            <Border Style="{StaticResource Panel}" Padding="0">
+              <StackPanel>
+                <Border Background="#F4F7FA" BorderBrush="#E1E6EC" BorderThickness="0,0,0,1" CornerRadius="7,7,0,0" Padding="26,23">
+                  <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel Margin="0,0,24,0">
+                      <TextBlock Text="THIẾT BỊ ĐƯỢC NHẬN DIỆN" Style="{StaticResource Caption}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding DriverBrand}" Foreground="{StaticResource Accent}" FontSize="14" FontWeight="SemiBold" Margin="0,15,0,4" TextTrimming="CharacterEllipsis" ToolTip="{Binding DriverBrand}" />
+                      <TextBlock Text="{Binding DriverModel}" FontSize="24" FontWeight="SemiBold" TextWrapping="Wrap" ToolTip="{Binding DriverModel}" />
+                      <TextBlock Text="{Binding DriverHost, StringFormat=Host: {0}}" Style="{StaticResource Caption}" Margin="0,10,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding DriverHost}" />
+                    </StackPanel>
+                    <Border Grid.Column="1" Background="#E8F0F8" BorderBrush="#D3E1EF" BorderThickness="1" CornerRadius="12" Padding="12,5" VerticalAlignment="Top">
+                      <TextBlock Text="{Binding DriverSupportLabel}" Foreground="#365A78" FontSize="11" FontWeight="SemiBold" />
+                    </Border>
+                  </Grid>
+                </Border>
+                <Grid Margin="26,23,26,26">
+                  <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                  <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="1*" /><ColumnDefinition Width="1.35*" /></Grid.ColumnDefinitions>
+                    <Border Background="#FAFBFC" BorderBrush="#E1E5EA" BorderThickness="1" CornerRadius="5" Padding="16" Margin="0,0,10,0">
+                      <StackPanel><TextBlock Text="Tên máy" Style="{StaticResource Caption}" /><TextBlock Text="{Binding DriverHost}" FontSize="15" FontWeight="SemiBold" Margin="0,7,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding DriverHost}" /></StackPanel>
+                    </Border>
+                    <Border Grid.Column="1" Background="#FAFBFC" BorderBrush="#E1E5EA" BorderThickness="1" CornerRadius="5" Padding="16" Margin="10,0,0,0">
+                      <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,14,0"><TextBlock Text="Serial thiết bị" Style="{StaticResource Caption}" /><TextBlock Text="{Binding DriverSerial}" FontSize="15" FontWeight="SemiBold" Margin="0,7,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding DriverSerial}" AutomationProperties.Name="Serial máy" /></StackPanel>
+                        <Button Grid.Column="1" Content="Sao chép" Command="{Binding CopySerialCommand}" Padding="12,7" VerticalAlignment="Center" />
+                      </Grid>
+                    </Border>
+                  </Grid>
+                  <Border Grid.Row="1" Background="#F7F9FB" BorderBrush="#DDE3EA" BorderThickness="1" CornerRadius="5" Padding="19" Margin="0,20,0,0">
+                    <Grid>
+                      <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                      <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,20,0"><TextBlock Text="Hỗ trợ driver chính thức" FontSize="17" FontWeight="SemiBold" /><TextBlock Text="Trang hỗ trợ được xác định từ hãng sản xuất của thiết bị." Style="{StaticResource Caption}" Margin="0,6,0,0" /></StackPanel>
+                        <Button Grid.Column="1" Content="Mở trang hỗ trợ" Command="{Binding OpenDriverSupportCommand}" Style="{StaticResource Primary}" VerticalAlignment="Center" />
+                      </Grid>
+                      <TextBlock Grid.Row="1" Text="ĐƯỜNG DẪN" Style="{StaticResource Caption}" FontWeight="SemiBold" Margin="0,18,0,6" />
+                      <TextBox Grid.Row="2" Text="{Binding DriverUrl, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" AutomationProperties.Name="URL tải driver" />
+                    </Grid>
+                  </Border>
+                  <Border Grid.Row="2" Background="#EEF3F7" CornerRadius="4" Padding="12,9" Margin="0,16,0,0">
+                    <TextBlock Text="{Binding DriverMessage}" Foreground="#4D5C69" TextWrapping="Wrap" />
+                  </Border>
+                </Grid>
+              </StackPanel>
+            </Border>
+            <TextBlock Text="MiniApps chỉ đọc thông tin từ Windows. Dữ liệu thiết bị không được gửi lên máy chủ riêng." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="2,13,0,0" />
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
+      <Grid Visibility="{Binding IsSetting, Converter={StaticResource BoolVisibility}}">
+        <Grid.InputBindings><KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}" /></Grid.InputBindings>
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <StackPanel Margin="0,0,0,16"><TextBlock Text="Setting" FontSize="28" FontWeight="SemiBold" /><TextBlock Text="Quản lý cấu hình ứng dụng và các thiết lập Windows của MiniApps." Foreground="{StaticResource Muted}" Margin="0,7,0,0" TextWrapping="Wrap" /></StackPanel>
+        <TabControl Grid.Row="1" SelectedIndex="{Binding SettingsTab}" Background="Transparent" BorderThickness="0" IsEnabled="{Binding IsIdle}" Padding="0,8,0,0" x:Name="SettingsTabs">
+          <TabControl.Resources><Style TargetType="TabItem">
+            <Setter Property="Padding" Value="18,10" /><Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabItem">
+              <Border x:Name="TabSurface" Background="Transparent" CornerRadius="5" Padding="{TemplateBinding Padding}"><ContentPresenter x:Name="TabHeader" ContentSource="Header" /></Border>
+              <ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="TabSurface" Property="Background" Value="#DFE6EF" /><Setter TargetName="TabHeader" Property="TextElement.FontWeight" Value="SemiBold" /></Trigger><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="TabSurface" Property="BorderBrush" Value="{StaticResource Accent}" /><Setter TargetName="TabSurface" Property="BorderThickness" Value="1" /></Trigger></ControlTemplate.Triggers>
+            </ControlTemplate></Setter.Value></Setter>
+          </Style></TabControl.Resources>
+          <TabItem>
+            <TabItem.Header><StackPanel Orientation="Horizontal"><TextBlock Text="Ứng dụng" /><Border Background="#D8E0E9" CornerRadius="9" Padding="7,1" Margin="8,0,0,0"><TextBlock Text="{Binding AppCount}" FontSize="11" /></Border></StackPanel></TabItem.Header>
+            <Border Style="{StaticResource Panel}" Padding="0">
+              <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="230" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <Border BorderBrush="#E1E5EA" BorderThickness="0,0,1,0" Padding="18">
+                  <Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                    <StackPanel><TextBlock Text="Tìm ứng dụng" Style="{StaticResource Caption}" Margin="0,0,0,6" /><TextBox Text="{Binding AppSearch, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Tìm ứng dụng" /><TextBlock Text="{Binding FilteredAppCount, StringFormat={}{0} kết quả}" Style="{StaticResource Caption}" Margin="0,7,0,11" /></StackPanel>
+                    <ListBox Grid.Row="1" ItemsSource="{Binding FilteredApps}" SelectedItem="{Binding SelectedApp}" BorderThickness="0" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="Danh sách ứng dụng">
+                      <ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Name}" TextWrapping="Wrap" /></DataTemplate></ListBox.ItemTemplate>
+                      <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="Padding" Value="9,10" /><Setter Property="HorizontalContentAlignment" Value="Stretch" /></Style></ListBox.ItemContainerStyle>
+                    </ListBox>
+                    <Button Grid.Row="2" Content="Thêm mới" Command="{Binding AddCommand}" Click="OnAddAppClick" Margin="0,14,0,0" AutomationProperties.Name="Thêm ứng dụng mới" />
+                  </Grid>
+                </Border>
+                <TextBlock Grid.Column="1" Text="Chọn một ứng dụng hoặc bấm Thêm mới." VerticalAlignment="Center" HorizontalAlignment="Center"><TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource Caption}"><Style.Triggers><DataTrigger Binding="{Binding HasSelectedApp}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
+                <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Visibility="{Binding HasSelectedApp, Converter={StaticResource BoolVisibility}}" Padding="24,20,20,20">
+                  <StackPanel DataContext="{Binding SelectedApp}">
+                    <Grid Margin="0,0,0,18"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Chi tiết ứng dụng" FontSize="18" FontWeight="SemiBold" /><TextBlock Text="Thông tin tải xuống và cài đặt im lặng." Style="{StaticResource Caption}" Margin="0,5,0,0" /></StackPanel><Button Grid.Column="1" Content="Xóa" Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=Window}}" Padding="12,6" VerticalAlignment="Top" AutomationProperties.Name="Xóa ứng dụng" /></Grid>
+                    <TextBlock Text="Tên ứng dụng" Margin="0,0,0,6" /><TextBox x:Name="AppNameEditor" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Tên ứng dụng" />
+                    <TextBlock Text="URL bộ cài HTTPS" Margin="0,16,0,6" /><TextBox Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="URL bộ cài HTTPS" />
+                    <TextBlock Text="Tham số cài đặt" Margin="0,16,0,6" /><TextBox Text="{Binding Arguments, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Tham số cài đặt" /><TextBlock Text="Có thể để trống nếu bộ cài không cần tham số." Style="{StaticResource Caption}" Margin="0,5,0,0" />
+                  </StackPanel>
+                </ScrollViewer>
+              </Grid>
+            </Border>
+          </TabItem>
+          <TabItem>
+            <TabItem.Header><StackPanel Orientation="Horizontal"><TextBlock Text="Thiết lập Windows" /><Border Background="#D8E0E9" CornerRadius="9" Padding="7,1" Margin="8,0,0,0"><TextBlock Text="{Binding WindowsCount}" FontSize="11" /></Border></StackPanel></TabItem.Header>
+            <Border Style="{StaticResource Panel}" Padding="0">
+              <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="230" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <Border BorderBrush="#E1E5EA" BorderThickness="0,0,1,0" Padding="18">
+                  <Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                    <StackPanel><TextBlock Text="Tìm thiết lập" Style="{StaticResource Caption}" Margin="0,0,0,6" /><TextBox Text="{Binding WindowsSearch, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Tìm thiết lập Windows" /><TextBlock Text="{Binding FilteredWindowsCount, StringFormat={}{0} kết quả}" Style="{StaticResource Caption}" Margin="0,7,0,11" /></StackPanel>
+                    <ListBox Grid.Row="1" ItemsSource="{Binding FilteredWindows}" SelectedItem="{Binding SelectedWindows}" BorderThickness="0" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="Danh sách thiết lập Windows"><ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Name}" TextWrapping="Wrap" /></DataTemplate></ListBox.ItemTemplate><ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="Padding" Value="9,10" /><Setter Property="HorizontalContentAlignment" Value="Stretch" /></Style></ListBox.ItemContainerStyle></ListBox>
+                    <Button Grid.Row="2" Content="Thêm mới" Command="{Binding AddWindowsCommand}" Click="OnAddWindowsClick" Margin="0,14,0,0" AutomationProperties.Name="Thêm thiết lập Windows mới" />
+                  </Grid>
+                </Border>
+                <TextBlock Grid.Column="1" Text="Chọn một thiết lập hoặc bấm Thêm mới." VerticalAlignment="Center" HorizontalAlignment="Center"><TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource Caption}"><Style.Triggers><DataTrigger Binding="{Binding HasSelectedWindows}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
+                <Grid Grid.Column="1" Visibility="{Binding HasSelectedWindows, Converter={StaticResource BoolVisibility}}" Margin="24,20,20,18" DataContext="{Binding SelectedWindows}">
+                  <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                  <Grid Margin="0,0,0,14"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Chi tiết thiết lập" FontSize="18" FontWeight="SemiBold" /><TextBlock Text="Lưu cấu hình không chạy câu lệnh." Style="{StaticResource Caption}" Margin="0,5,0,0" /></StackPanel><Button Grid.Column="1" Content="Xóa" Command="{Binding DataContext.DeleteWindowsCommand, RelativeSource={RelativeSource AncestorType=Window}}" Padding="12,6" VerticalAlignment="Top" AutomationProperties.Name="Xóa thiết lập Windows" /></Grid>
+                  <Border Grid.Row="1" Background="#FFF6E8" BorderBrush="#E8D3AE" BorderThickness="1" CornerRadius="4" Padding="10,8" Margin="0,0,0,12" Visibility="{Binding DataContext.IsSelectedDebloat, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolVisibility}}"><TextBlock Text="Debloatware đã được tách khỏi Install app. Optimize Windows hiện đang ở chế độ preview." Foreground="#765327" TextWrapping="Wrap" /></Border>
+                  <StackPanel Grid.Row="2"><TextBlock Text="Tên thiết lập" Margin="0,0,0,6" /><TextBox x:Name="WindowsNameEditor" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Tên thiết lập" /></StackPanel>
+                  <StackPanel Grid.Row="3" Margin="0,12,0,0"><TextBlock Text="Mô tả tác động" Margin="0,0,0,6" /><TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AutomationProperties.Name="Mô tả thiết lập" /></StackPanel>
+                  <TextBlock Grid.Row="4" Text="Câu lệnh PowerShell" Margin="0,12,0,6" />
+                  <TextBox Grid.Row="5" Text="{Binding Script, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" AcceptsTab="True" VerticalContentAlignment="Top" MinHeight="120" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12" AutomationProperties.Name="Câu lệnh PowerShell" />
+                  <TextBlock Grid.Row="6" Text="Chạy bằng Windows PowerShell 5.1 với quyền Admin. Dùng throw hoặc exit khác 0 để MiniApps nhận biết lỗi." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,8,0,0" />
+                </Grid>
+              </Grid>
+            </Border>
+          </TabItem>
+        </TabControl>
+        <Border Grid.Row="2" BorderBrush="#DDE1E7" BorderThickness="0,1,0,0" Padding="0,14,0,0" Margin="0,12,0,0">
+          <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <StackPanel Margin="0,0,18,0"><TextBlock Text="{Binding SaveStatus}" FontWeight="SemiBold" /><TextBlock Text="{Binding CurrentValidationError}" Foreground="#A13A32" TextWrapping="Wrap" Margin="0,4,0,0" Visibility="{Binding HasValidationError, Converter={StaticResource BoolVisibility}}" /><TextBlock Text="{Binding SettingsMessage}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0" /></StackPanel>
+            <Button Grid.Column="1" Content="Hủy thay đổi" Command="{Binding DiscardCommand}" Margin="0,0,10,0" VerticalAlignment="Center" />
+            <Button Grid.Column="2" Content="Lưu thay đổi" Style="{StaticResource Primary}" Command="{Binding SaveCommand}" VerticalAlignment="Center" AutomationProperties.HelpText="Ctrl+S" />
+          </Grid>
+        </Border>
+      </Grid>
+    </Grid>
+  </Grid>
+</Window>

@@ -1,0 +1,12 @@
+<Window x:Class="MiniApps.OfficeChoiceDialog" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="MiniApps" Width="540" SizeToContent="Height" ResizeMode="NoResize" WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False" Background="#F3F4F6" Foreground="{StaticResource Ink}" FontFamily="Segoe UI" FontSize="13">
+  <StackPanel Background="#F3F4F6" Margin="28">
+    <TextBlock Text="Bạn muốn sử dụng ứng dụng nào:" FontSize="23" FontWeight="SemiBold" Margin="0,0,0,24" TextWrapping="Wrap" />
+    <UniformGrid Columns="3">
+      <Button x:Name="OfficeButton" Content="Office 2024" Style="{StaticResource Primary}" Margin="0,0,8,0" Tag="Office" Click="Choose" />
+      <Button x:Name="WpsButton" Content="WPS" Margin="0,0,8,0" Tag="Wps" Click="Choose" />
+      <Button x:Name="CancelButton" Content="Cancel" IsCancel="True" Click="Cancel" />
+    </UniformGrid>
+  </StackPanel>
+</Window>
