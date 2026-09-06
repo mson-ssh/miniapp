@@ -1,6 +1,12 @@
 # A local disposable fixture; no downloads, installers, elevation or Windows changes.
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'bootstrap.ps1')
+$rejected = $false
+try { Test-MiniAppsWindowsBuild -Build 17762 -DisplayVersion '1803' | Out-Null }
+catch { $rejected = $_.Exception.Message -match 'build 17762' -and $_.Exception.Message -match '17763' }
+if (-not $rejected) { throw 'Bootstrap must reject Windows build 17762 with the detected and required builds.' }
+if (-not (Test-MiniAppsWindowsBuild -Build 17763 -DisplayVersion '1809')) { throw 'Bootstrap must accept Windows build 17763.' }
+Write-Host 'PASS bootstrap Windows boundary: reject 17762, accept 17763.'
 $fixture = Join-Path $env:TEMP ('MiniApps-bootstrap-test-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $fixture | Out-Null
 $originalTemp = $env:TEMP; $originalTmp = $env:TMP; $oldResult = $env:MINIAPPS_FIXTURE_RESULT

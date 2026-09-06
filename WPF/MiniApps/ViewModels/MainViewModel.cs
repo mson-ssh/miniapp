@@ -75,7 +75,7 @@ public sealed class MainViewModel : Observable
     public ICollectionView FilteredWindows { get; }
     private int settingsTab;
     public int SettingsTab { get => settingsTab; set { if (Set(ref settingsTab, value)) RefreshSettingsState(); } }
-    public string Machine => $"{Environment.MachineName}  ·  Windows {Environment.OSVersion.Version.Build}  ·  {System.Runtime.InteropServices.RuntimeInformation.OSArchitecture}";
+    public string Machine => $"{Environment.MachineName}  ·  Windows {WindowsCompatibility.CurrentBuild}  ·  {System.Runtime.InteropServices.RuntimeInformation.OSArchitecture}";
     public string RuntimeLabel => preview ? "CHẾ ĐỘ XEM THỬ · KHÔNG CÀI ĐẶT" : "Windows desktop · v0.2.0";
     private int page;
     public int Page

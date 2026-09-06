@@ -262,6 +262,32 @@ try
         service.RunAsync(Catalog.Defaults().Take(4).ToArray(), WindowsSettingsCatalog.Defaults().Take(3).ToArray(), Path.Combine(root, "parallel"), new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(_ => { }), default).GetAwaiter().GetResult();
         Assert(calls == 7 && completed == 7 && outcomes.Count(e => e.Finished && !e.Failed) == 7);
     });
+    Check("Unsupported Windows setting is skipped while applications continue", () =>
+    {
+        using var client = new System.Net.Http.HttpClient(new FakeHttp());
+        var calls = 0;
+        var outcomes = new List<DeploymentEvent>();
+        var service = new DeploymentService(client, (_, _, _) => { calls++; return Task.FromResult(0); }, _ => false,
+            getWindowsBuild: () => 17762);
+        service.RunAsync(Catalog.Defaults().Take(1).ToArray(), WindowsSettingsCatalog.Defaults().Take(1).ToArray(),
+            Path.Combine(root, "legacy-skip"), new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(_ => { }), default).GetAwaiter().GetResult();
+        Assert(calls == 1);
+        Assert(outcomes.Any(e => e.Id == "windows:Desktop" && e.Status == "Bỏ qua · Windows không hỗ trợ" && e.Finished && !e.Failed));
+        Assert(outcomes.Any(e => e.Id == "evkey" && e.Status == "Hoàn tất" && e.Finished && !e.Failed));
+    });
+    Check("Windows 10 1809 compatible settings execute", () =>
+    {
+        Assert(WindowsCompatibility.MinimumBuildFor(WindowsSettingsCatalog.Defaults().Single(s => s.Action == "Winget")) == 17763);
+        Assert(WindowsCompatibility.MinimumBuildFor(new WindowsSettingDefinition { Action = "Custom" }) == 17763);
+        var calls = 0;
+        var outcomes = new List<DeploymentEvent>();
+        var service = new DeploymentService(run: (_, _, _) => { calls++; return Task.FromResult(0); },
+            getWindowsBuild: () => 17763);
+        service.RunAsync([], WindowsSettingsCatalog.Defaults().Take(1).ToArray(), Path.Combine(root, "legacy-supported"),
+            new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(_ => { }), default).GetAwaiter().GetResult();
+        Assert(calls == 1);
+        Assert(outcomes.Any(e => e.Id == "windows:Desktop" && e.Status == "Hoàn tất" && e.Finished && !e.Failed));
+    });
     Check("Downloads have no artificial four-item limit", () => {
         using var handler = new ConcurrentHttp(8); using var client = new System.Net.Http.HttpClient(handler);
         var service = new DeploymentService(client, (_, _, _) => Task.FromResult(0), _ => false);

@@ -1,5 +1,17 @@
 # MiniApps bootstrap: irm https://raw.githubusercontent.com/mson-ssh/miniapp/main/WPF/bootstrap.ps1 | iex
 # Publish the ZIP and SHA-256 assets with Publish.ps1 before distributing this command.
+function Test-MiniAppsWindowsBuild {
+    param(
+        [Parameter(Mandatory = $true)][int]$Build,
+        [string]$DisplayVersion = ''
+    )
+    if ($Build -lt 17763) {
+        $versionText = if ([string]::IsNullOrWhiteSpace($DisplayVersion)) { '' } else { " $DisplayVersion" }
+        throw "Detected Windows$versionText (build $Build). MiniApps requires Windows 10 1809 (build 17763) or later."
+    }
+    return $true
+}
+
 function Start-MiniApps {
     param(
         [string]$ReleaseBase = 'https://github.com/mson-ssh/miniapp/releases/latest/download',
@@ -13,10 +25,11 @@ function Start-MiniApps {
     if (-not $admin -and -not $Preview) {
         # Elevate this exact function, not a second mutable copy downloaded from main.
         $body = ${function:Start-MiniApps}.ToString()
+        $buildTestBody = ${function:Test-MiniAppsWindowsBuild}.ToString()
         $escapedBase = $ReleaseBase.Replace("'", "''")
         $escapedPath = $PackagePath.Replace("'", "''")
         $escapedHash = $ExpectedSha256.Replace("'", "''")
-        $command = "function Start-MiniApps { $body }; Start-MiniApps -ReleaseBase '$escapedBase' -PackagePath '$escapedPath' -ExpectedSha256 '$escapedHash'"
+        $command = "function Test-MiniAppsWindowsBuild { $buildTestBody }; function Start-MiniApps { $body }; Start-MiniApps -ReleaseBase '$escapedBase' -PackagePath '$escapedPath' -ExpectedSha256 '$escapedHash'"
         $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
         Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded"
         return
@@ -36,9 +49,7 @@ function Start-MiniApps {
         if ($osKey) { $osKey.Dispose() }
         $osRoot.Dispose()
     }
-    if ($windowsBuild -lt 19044 -and -not $Preview) {
-        throw "Detected Windows $displayVersion (build $windowsBuild). MiniApps currently supports Windows 10 21H2 (build 19044) or later, including Windows 11."
-    }
+    if (-not $Preview) { Test-MiniAppsWindowsBuild -Build $windowsBuild -DisplayVersion $displayVersion | Out-Null }
     # .NET Framework 4.8 is an OS component on the supported Windows builds.
     # Inspect the explicit registry view so a 32-bit bootstrap also detects it.
     $view = if ([Environment]::Is64BitOperatingSystem) { [Microsoft.Win32.RegistryView]::Registry64 } else { [Microsoft.Win32.RegistryView]::Registry32 }

@@ -18,7 +18,7 @@ Status: implemented and locally verified on .NET Framework 4.8 x64. Clean Window
 - Preserve the WPF UI and current installer behavior while removing the bundled .NET 10 runtime.
 - Current x64 release: ZIP 63,088,082 bytes (60.17 MiB); published directory approximately 139.53 MiB.
 - Target compressed download: <= 5 MiB, with 0.5–3 MiB as an estimate pending a measured build. Installer downloads are excluded.
-- Target normal Windows 10 21H2/build 19044 or newer and Windows 11 installations with .NET Framework 4.8 or newer present.
+- Target Windows 10 1809/build 17763 or newer and Windows 11 installations with .NET Framework 4.8 or newer present.
 - Retain the current release as the comparison/rollback artifact. Do not overwrite existing user configuration or delete old artifacts during migration.
 
 ## 1. Establish a buildable net48 candidate

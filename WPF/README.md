@@ -19,7 +19,7 @@ Bản nâng cấp độc lập trong `WPF/`; không sửa hoặc thực thi `../
 
 ## Build và xem thử
 
-Máy phát triển dùng SDK C# hiện đại để build `net48`; reference assemblies chỉ dùng lúc build. Máy khách dùng **.NET Framework 4.8 trở lên có sẵn trong Windows 10 21H2+/Windows 11**, không tải kèm .NET Desktop Runtime. Bootstrap kiểm tra thành phần Framework trước khi chạy và không tự cài runtime. Bản Windows đã lược bỏ/hỏng thành phần này cần khôi phục thành phần Windows.
+Máy phát triển dùng SDK C# hiện đại để build `net48`; reference assemblies chỉ dùng lúc build. Máy khách dùng **Windows 10 1809/build 17763 trở lên và .NET Framework 4.8 trở lên**, không tải kèm .NET Desktop Runtime. Bootstrap kiểm tra riêng Windows build và Framework trước khi chạy, không tự cài runtime. Bản Windows đã lược bỏ/hỏng thành phần này cần khôi phục thành phần Windows.
 
 ```powershell
 dotnet build WPF/MiniApps/MiniApps.csproj -c Release
@@ -58,7 +58,7 @@ irm https://raw.githubusercontent.com/mson-ssh/miniapp/main/WPF/bootstrap.ps1 | 
 
 **Không phát lệnh này cho khách trước khi assets tồn tại.** Khi đổi repo, sửa ReleaseBase và kiểm tra allowlist URL manifest trong bootstrap, cùng URL xuất ra trong Publish.ps1.
 
-Baseline triển khai: Windows 10 21H2/build 19044 trở lên hoặc Windows 11; cần kiểm tra từng edition với chính sách hỗ trợ .NET/Windows trước phát hành thực tế. Windows đã bị lược bỏ thành phần hệ thống hoặc chặn script bằng policy có thể không chạy được. Bản x64 đã build và mở tại máy phát triển; chưa chứng nhận ma trận Windows 10/11 sạch, ARM64 hoặc x86.
+Baseline triển khai: Windows 10 1809/build 17763 trở lên hoặc Windows 11, với .NET Framework 4.8+. Từng thiết lập tích hợp kiểm tra build trước khi chạy; tác vụ không tương thích báo **Bỏ qua · Windows không hỗ trợ** và không làm dừng ứng dụng hay thiết lập khác. Thiết lập PowerShell tùy chỉnh dùng baseline 17763. Cần kiểm tra từng edition với chính sách hỗ trợ .NET/Windows trước phát hành thực tế. Windows đã bị lược bỏ thành phần hệ thống hoặc chặn script bằng policy có thể không chạy được. Bản x64 đã build và mở tại máy phát triển; chưa chứng nhận ma trận Windows 10/11 sạch, ARM64 hoặc x86.
 
 ## Luồng bootstrap và dọn dẹp
 

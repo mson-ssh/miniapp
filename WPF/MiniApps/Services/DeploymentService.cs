@@ -16,13 +16,16 @@ public sealed class DeploymentService
     private readonly Func<string, string, IProgress<string>, Task<int>> run;
     private readonly Func<AppDefinition, bool> installed;
     private readonly Func<TimeSpan, CancellationToken, Task> delay;
+    private readonly Func<int> getWindowsBuild;
     public DeploymentService(HttpClient? http = null, Func<string, string, IProgress<string>, Task<int>>? run = null,
-        Func<AppDefinition, bool>? installed = null, Func<TimeSpan, CancellationToken, Task>? delay = null)
+        Func<AppDefinition, bool>? installed = null, Func<TimeSpan, CancellationToken, Task>? delay = null,
+        Func<int>? getWindowsBuild = null)
     {
         this.http = http ?? DefaultHttp;
         this.run = run ?? RunPowerShellAsync;
         this.installed = installed ?? IsInstalled;
         this.delay = delay ?? Task.Delay;
+        this.getWindowsBuild = getWindowsBuild ?? (() => WindowsCompatibility.CurrentBuild);
     }
     private static HttpClient CreateDefaultHttpClient()
     {
@@ -38,6 +41,7 @@ public sealed class DeploymentService
         Catalog.Validate(apps);
         WindowsSettingsCatalog.Validate(options);
         Directory.CreateDirectory(workDir);
+        var windowsBuild = options.Count == 0 ? WindowsCompatibility.MinimumWindowsBuild : getWindowsBuild();
         using var msiInstallSlot = new SemaphoreSlim(1);
         var appTasks = apps.Select(async app =>
         {
@@ -93,6 +97,12 @@ public sealed class DeploymentService
         var settingTasks = options.Select(async option =>
         {
             if (token.IsCancellationRequested) { events.Report(new(option.TaskId, "Đã hủy", 0, true)); return; }
+            if (!WindowsCompatibility.Supports(option, windowsBuild))
+            {
+                log.Report($"Windows/{option.Name}: bỏ qua trên build {windowsBuild}; yêu cầu build {WindowsCompatibility.MinimumBuildFor(option)} trở lên.");
+                events.Report(new(option.TaskId, "Bỏ qua · Windows không hỗ trợ", 100, true));
+                return;
+            }
             try
             {
                 events.Report(new(option.TaskId, "Đang áp dụng"));
