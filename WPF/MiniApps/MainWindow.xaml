@@ -92,7 +92,7 @@
           <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
             <StackPanel Margin="0,0,16,0"><TextBlock Text="{Binding SelectionText}" FontWeight="SemiBold" /><TextBlock Text="{Binding Summary}" Style="{StaticResource Caption}" Margin="0,5,0,7" TextWrapping="Wrap" /><ProgressBar Value="{Binding Overall, Mode=OneWay}" Height="3" Background="#E0E5EB" Foreground="{StaticResource Accent}" BorderThickness="0" /></StackPanel>
             <Button Grid.Column="1" Content="Dừng hàng đợi" Command="{Binding CancelCommand}" Visibility="{Binding IsBusy, Converter={StaticResource BoolVisibility}}" VerticalAlignment="Center" Margin="0,0,10,0" />
-            <Button Grid.Column="2" Content="Cài đặt" Command="{Binding InstallCommand}" Style="{StaticResource Primary}" Width="120" VerticalAlignment="Center" />
+            <Button Grid.Column="2" Content="{Binding InstallButtonText}" Command="{Binding InstallCommand}" Style="{StaticResource Primary}" Width="120" VerticalAlignment="Center" />
           </Grid>
         </Border>
       </Grid>
@@ -102,7 +102,7 @@
           <TextBlock Text="Optimize Windows" FontSize="28" FontWeight="SemiBold" />
           <TextBlock Text="Dọn gọn Windows theo cấu hình an toàn đã được MiniApps xác định." Foreground="{StaticResource Muted}" Margin="0,7,0,0" />
           <Border Background="#EEF4FA" BorderBrush="#D8E3EE" BorderThickness="1" CornerRadius="5" Padding="12,8" HorizontalAlignment="Left" Margin="0,15,0,0">
-            <TextBlock Text="Preview — không thay đổi hệ thống" Foreground="#365A78" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding OptimizeNotice}" Foreground="#365A78" FontWeight="SemiBold" />
           </Border>
         </StackPanel>
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,6,0">
@@ -110,7 +110,7 @@
             <Border Style="{StaticResource Panel}">
               <StackPanel>
                 <TextBlock Text="Các nhóm tối ưu" FontSize="20" FontWeight="SemiBold" />
-                <TextBlock Text="Bản xem thử chỉ mô phỏng thứ tự và trạng thái. Không tải công cụ, không chạy PowerShell, không sửa Registry và không gỡ ứng dụng." Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,9,0,22" />
+                <TextBlock Text="{Binding OptimizeDescription}" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,9,0,22" />
                 <ItemsControl ItemsSource="{Binding OptimizeTasks}" x:Name="OptimizeTaskList">
                   <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="2" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                   <ItemsControl.ItemTemplate><DataTemplate>
@@ -123,7 +123,7 @@
                           <TextBlock Text="{Binding Status}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Status}" Margin="0,0,10,0" />
                           <TextBlock Grid.Column="1" Text="{Binding Progress, StringFormat={}{0:0}%}" Style="{StaticResource Caption}" />
                         </Grid>
-                        <ProgressBar Grid.Row="3" Value="{Binding Progress, Mode=OneWay}" Height="4" BorderThickness="0" Background="#E8EBF0" Foreground="{StaticResource Accent}" />
+                        <ProgressBar Grid.Row="3" Value="{Binding Progress, Mode=OneWay}" IsIndeterminate="{Binding DataContext.OptimizeIndeterminate, RelativeSource={RelativeSource AncestorType=Window}}" Height="4" BorderThickness="0" Background="#E8EBF0" Foreground="{StaticResource Accent}" />
                       </Grid>
                     </Border>
                   </DataTemplate></ItemsControl.ItemTemplate>

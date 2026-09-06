@@ -11,7 +11,7 @@
     <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>MiniApps</AssemblyName>
-    <Version>0.3.0</Version>
+    <Version>0.3.1</Version>
     <MiniAppsEdition Condition="'$(MiniAppsEdition)' == ''">Developer</MiniAppsEdition>
     <DefineConstants Condition="'$(MiniAppsEdition)' == 'Developer'">$(DefineConstants);MINIAPPS_DEVELOPER</DefineConstants>
   </PropertyGroup>
@@ -23,5 +23,8 @@
   <ItemGroup>
     <Content Include="Scripts\*.ps1" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Scripts\Update-Winget.ps1;Scripts\Invoke-Debloat.ps1" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
+    <Content Remove="Scripts\Optimize-Defaults.ps1" />
   </ItemGroup>
 </Project>

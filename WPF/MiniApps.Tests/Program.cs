@@ -238,12 +238,15 @@ try
     Check("Optimize Windows preview only simulates four groups", () => {
         var vm = new MainViewModel(true, readDeviceInfo: () => Task.FromResult(new DeviceInfo("PC", "Dell", "Model", "Serial", "https://www.dell.com/support/home/"))) { Page = 1 };
         Assert(vm.IsOptimize && vm.OptimizeTasks.Count == 4 && vm.OptimizeTasks.All(t => t.Status == "Sẵn sàng" && t.Progress == 0));
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         vm.OptimizeCommand.Execute(null);
         Assert(SpinWait.SpinUntil(() => vm.IsBusy, TimeSpan.FromSeconds(1)));
         vm.Page = 2; Assert(vm.IsDriver);
         vm.Page = 0; Assert(vm.IsInstall);
         vm.Page = 3; Assert(vm.IsInstall);
         Assert(SpinWait.SpinUntil(() => !vm.IsBusy, TimeSpan.FromSeconds(5)));
+        stopwatch.Stop();
+        Assert(stopwatch.Elapsed < TimeSpan.FromSeconds(1));
         vm.Page = 3; Assert(vm.IsSetting);
         Assert(vm.OptimizeStarted && vm.OptimizeOverall == 100 && vm.OptimizeTasks.All(t => t.Status == "Hoàn tất · mô phỏng" && t.Progress == 100));
         Assert(vm.OptimizeSummary.Contains("không có thay đổi"));
@@ -502,17 +505,13 @@ var renderThread = new Thread(() =>
         using (var output = File.Create(Path.Combine(targetDir, "install-progress.png"))) progressEncoder.Save(output);
         Console.WriteLine("PASS WPF preview command, async progress and completion");
         if (!vm.Apps.Any(a => a.Definition.Suite == "Office") || vm.Apps.Any(a => a.Definition.Suite == "WPS")) throw new Exception("Office choice did not select the correct catalog.");
-        nextChoice = OfficeChoice.Cancel;
-        var oldSummary = vm.Summary;
-        vm.InstallCommand.Execute(null);
-        if (vm.IsBusy || vm.Summary != oldSummary) throw new Exception("Cancel changed the completed run.");
+        if (!vm.InstallFinished || vm.InstallCommand.CanExecute(null) || vm.InstallButtonText != "Đã hoàn tất") throw new Exception("Completed installation must stay disabled.");
+        var oldSummary = vm.Summary; var oldAskCount = askCount;
         nextChoice = OfficeChoice.Wps;
-        window.Dispatcher.Invoke(() => vm.InstallCommand.Execute(null));
-        frame = new System.Windows.Threading.DispatcherFrame(); started = DateTime.UtcNow;
-        timer.Start(); System.Windows.Threading.Dispatcher.PushFrame(frame); timer.Stop();
-        if (vm.IsBusy || vm.Apps.Any(a => a.Definition.Suite == "Office") || !vm.Apps.Any(a => a.Definition.Suite == "WPS" && a.Progress == 100) || askCount != 3) throw new Exception("WPS choice or per-run prompt failed.");
+        vm.InstallCommand.Execute(null);
+        if (vm.IsBusy || vm.Summary != oldSummary || askCount != oldAskCount) throw new Exception("Disabled installation started a second run.");
         if (vm.SystemTasks.Count != 1 || vm.SystemTasks[0].Name != "Windows Setting" || vm.SystemTasks[0].Progress != 100 || vm.SystemTasks[0].Status != "Hoàn tất") throw new Exception("Windows settings must be represented by one completed summary row.");
-        Console.WriteLine("PASS each run asks again; Office, Cancel and WPS catalogs");
+        Console.WriteLine("PASS completed install becomes gray and cannot run again");
         window.Close();
         var publicVm = new MainViewModel(true, developerEdition: false);
         var publicWindow = new MiniApps.MainWindow(publicVm) { ShowInTaskbar = false, Left = -20000, Top = -20000 };

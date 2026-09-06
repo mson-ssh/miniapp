@@ -1,6 +1,6 @@
 param(
     [ValidateSet('win-x64')][string]$Runtime = 'win-x64',
-    [ValidatePattern('^[a-zA-Z0-9._-]+$')][string]$Version = '0.3.0',
+    [ValidatePattern('^[a-zA-Z0-9._-]+$')][string]$Version = '0.3.1',
     [string]$Dotnet = 'dotnet'
 )
 $ErrorActionPreference = 'Stop'

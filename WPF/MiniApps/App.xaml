@@ -20,7 +20,10 @@
         </ControlTemplate.Triggers>
       </ControlTemplate></Setter.Value></Setter>
     </Style>
-    <Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Background" Value="{StaticResource Accent}" /><Setter Property="Foreground" Value="White" /></Style>
+    <Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+      <Setter Property="Background" Value="{StaticResource Accent}" /><Setter Property="Foreground" Value="White" />
+      <Style.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Background" Value="#D5D9DF" /><Setter Property="Foreground" Value="#747B86" /></Trigger></Style.Triggers>
+    </Style>
     <Style TargetType="TextBox"><Setter Property="Padding" Value="9,7" /><Setter Property="Background" Value="#FAFAFB" /><Setter Property="BorderBrush" Value="#CCD1D9" /><Setter Property="BorderThickness" Value="1" /><Setter Property="VerticalContentAlignment" Value="Center" /></Style>
     <Style TargetType="ComboBox"><Setter Property="Padding" Value="8,6" /><Setter Property="MinHeight" Value="34" /></Style>
     <Style TargetType="CheckBox"><Setter Property="VerticalContentAlignment" Value="Center" /><Setter Property="Margin" Value="0,6" /><Setter Property="Foreground" Value="{StaticResource Ink}" /></Style>

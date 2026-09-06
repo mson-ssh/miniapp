@@ -1,4 +1,16 @@
-# MiniApps Desktop — WPF v0.3.0 / dual runtime
+# MiniApps Desktop — WPF v0.3.1 / dual runtime
+
+`v0.3.1` hiện là mã nguồn đang phát triển, chưa phát hành. Lệnh `irm` vẫn tải Release `v0.3.0`; push mã nguồn không cập nhật các gói ZIP đã phát hành. Bản .NET 10 chưa được đồng bộ tính năng Optimize mới.
+
+## Optimize trên .NET Framework 4.8
+
+Optimize dùng Default của [Win11Debloat](https://github.com/Raphire/Win11Debloat/tree/6012b02ea282f23ea943946206762fd430025c6f), cố định commit `6012b02ea282f23ea943946206762fd430025c6f` và kiểm tra SHA-256 trước khi giải nén. Chỉ loại `CreateRestorePoint` khỏi `Config/DefaultSettings.json`; giữ danh sách gỡ ứng dụng Default và 16 thiết lập còn lại. Không dùng Default Lite.
+
+Một lần bấm áp dụng toàn bộ profile qua một tiến trình upstream; giữ thứ tự nội bộ của upstream để tránh xung đột Registry/Appx. Không hiển thị phần trăm giả trong lượt chạy thật: thanh tiến trình chạy không xác định tới khi tiến trình kết thúc. Yêu cầu Administrator; khóa phiên cài đặt/tối ưu đang chạy khác. Không tự khởi động lại Explorer; đăng xuất hoặc khởi động lại sau khi hoàn tất.
+
+Nhật ký và bản sao lưu Registry được giữ ở `%LocalAppData%\MiniApps\OptimizeLogs`. Tệp tải về được dọn sau khi chạy; nếu không lưu được backup thì giữ thư mục làm việc để bảo toàn backup. Developer preview chỉ mô phỏng, không tải hay thực thi Win11Debloat. Chưa kiểm chứng thay đổi hệ thống thực tế trên VM Windows 10/11.
+
+Quy trình phát triển: cập nhật và kiểm thử net48 trước. Chỉ đồng bộ/build net10 hoặc push GitHub/phát hành khi người dùng yêu cầu riêng. Phần mô tả Optimize preview bên dưới phản ánh bản net10 cũ; net48 áp dụng luồng mới nêu trên.
 
 Bản nâng cấp độc lập trong `WPF/`; không sửa hoặc thực thi `../Setup.ps1`.
 
@@ -7,10 +19,10 @@ Bản nâng cấp độc lập trong `WPF/`; không sửa hoặc thực thi `../
 - C# / XAML, MVVM, WPF control chuẩn được style nhẹ. Không WebView2, không font icon, không thư viện UI bên ngoài.
 - Nền sáng dịu `#F3F4F6`, sidebar `#ECEEF1`, panel `#FAFAFB`, xanh nhấn `#3B6EA8`.
 - Sidebar Developer: **Install app**, **Optimize Windows**, **Driver**, **Setting**. Bản Public qua `irm` chỉ có **Install app**, **Optimize Windows** và **Driver**.
-- Install app: một nút Cài đặt mở hộp thoại chỉ có “Bạn muốn sử dụng ứng dụng nào:” với **Office 2024 / WPS / Cancel** (cả bản thật và preview). Cancel, Esc hoặc đóng hộp thoại không tải/chạy tác vụ nào. Chọn Office/WPS bắt đầu toàn bộ catalog tương ứng, không có checkbox ứng dụng hay xác nhận thừa lần hai. Danh sách chỉ hiện sau khi bắt đầu dưới dạng lưới ba cột; mỗi bản ghi có tên, trạng thái và tiến trình tải/cài. Bộ cài không có % dùng thanh chạy không xác định. Log trong phiên.
+- Install app: một nút Cài đặt mở hộp thoại chỉ có “Bạn muốn sử dụng ứng dụng nào:” với **Office 2024 / WPS / Cancel** (cả bản thật và preview). Cancel, Esc hoặc đóng hộp thoại không tải/chạy tác vụ nào. Chọn Office/WPS bắt đầu toàn bộ catalog tương ứng, không có checkbox ứng dụng hay xác nhận thừa lần hai. Danh sách chỉ hiện sau khi bắt đầu dưới dạng lưới ba cột; mỗi bản ghi có tên, trạng thái và tiến trình tải/cài. Bộ cài không có % dùng thanh chạy không xác định. Khi toàn bộ lượt cài hoàn tất, nút đổi thành **Đã hoàn tất**, chuyển màu xám và bị khóa trong suốt phiên ứng dụng; lượt bị hủy hoặc gặp lỗi cấp phiên vẫn cho phép thử lại. Log trong phiên.
 - Driver: đọc Host, hãng, model và serial bằng CIM của Windows (registry làm phương án dự phòng). Serial có thể sao chép. Tên hãng được chuẩn hóa và ánh xạ tới URL HTTPS hỗ trợ chính thức của Dell, HP, Lenovo, ASUS, Acer, MSI, Microsoft Surface hoặc Samsung; hãng chưa biết không được tự suy đoán URL. Nút mở trang do người dùng chủ động bấm; MiniApps chưa tự tải/cài driver và không gửi thông tin máy lên dịch vụ riêng.
 - Install app không hiển thị danh sách hoặc checkbox thiết lập Windows trước khi chạy. Toàn bộ thiết lập đã lưu chạy mặc định sau xác nhận Office/WPS, **ngoại trừ Debloat** đã được tách khỏi luồng Install. Bộ lọc nhận diện Debloat theo cả ID và Action để cấu hình lưu cũ cũng không đưa tác vụ này vào lượt cài. Trong tiến trình, các tác vụ còn lại được tổng hợp thành một bản ghi **Windows Setting**; bấm vào bản ghi để xổ/thu danh sách từng thiết lập, trạng thái và phần trăm riêng. PowerShell không cung cấp tiến độ nội bộ nên mỗi mục chuyển từ 0% sang 100% khi kết thúc. Cancel không chạy gì. Quản lý danh sách ở Setting → Các thiết lập; lưu cấu hình chưa chạy tác vụ.
-- Optimize Windows hiện là **preview giao diện** với bốn nhóm: gỡ ứng dụng thừa, quyền riêng tư & quảng cáo, Copilot & AI, giao diện Windows. Nút Tối ưu Windows chỉ mô phỏng trạng thái và tiến trình trong bộ nhớ; không gọi PowerShell/DeploymentService, không tải công cụ, không sửa Registry và không gỡ ứng dụng.
+- Optimize Windows hiện là **preview giao diện** với bốn nhóm: gỡ ứng dụng thừa, quyền riêng tư & quảng cáo, Copilot & AI, giao diện Windows. Một lần bấm sẽ khởi chạy đồng thời cả bốn nhóm và chờ toàn bộ hoàn tất. Hiện nút Tối ưu Windows chỉ mô phỏng trạng thái và tiến trình trong bộ nhớ; không gọi PowerShell/DeploymentService, không tải công cụ, không sửa Registry và không gỡ ứng dụng.
 - Setting chỉ có trong edition Developer và có hai tab **Ứng dụng** và **Thiết lập Windows**, hiển thị số lượng mục, tìm kiếm riêng và hỗ trợ thêm/sửa/xóa. Danh sách nằm bên trái, biểu mẫu chỉnh sửa nằm bên phải. Trạng thái **Đã lưu/Chưa lưu thay đổi**, **Hủy thay đổi**, **Lưu thay đổi** và `Ctrl+S` chỉ tác động tab đang mở; đổi tab vẫn giữ bản nháp và bản nháp chưa lưu không ảnh hưởng lượt cài.
 - Ứng dụng: giao diện Setting chỉ gồm tên, URL và tham số cài đặt. MiniApps tự nhận diện ứng dụng đã cài từ tên hiển thị trong Windows và quy tắc tích hợp cho catalog mặc định; người dùng không phải cấu hình regex. SHA-256 và nhóm Office/WPS hiện có được giữ trong cấu hình nội bộ để bảo toàn catalog. Ứng dụng thêm mới là ứng dụng thông thường. Xóa khỏi danh sách không gỡ app đã cài. Có thể lưu danh sách rỗng; xóa Office/WPS nghĩa là suite đó không còn gói nào trong lượt chạy.
 - Thiết lập Windows: tên, mô tả tác động và trình soạn **Câu lệnh PowerShell** lớn, dùng font Consolas. Debloat cũ hiển thị cảnh báo đã tách khỏi Install app và Optimize còn ở preview. Engine chạy đúng nội dung Script đã lưu, không chuyển sang tác vụ tích hợp khác. Xóa không hoàn tác hệ thống. Mọi mục đã lưu đều có trong lượt tiếp theo; không có trạng thái chọn/bỏ chọn từng lượt. Cấu hình cũ chỉ lưu Action được bổ sung câu lệnh mặc định trong bộ nhớ; chỉ ghi xuống đĩa khi Lưu. Nội dung script đã sửa được giữ nguyên.
@@ -53,7 +65,7 @@ Mở `MiniApps.exe` trực tiếp không tự xin quyền Admin, cho phép xem g
 ## Đóng gói / phát hành
 
 ```powershell
-./WPF/Publish.ps1 -Runtime win-x64 -Version 0.3.0
+./WPF/Publish.ps1 -Runtime win-x64 -Version 0.3.1
 # Nếu dotnet không có trong PATH:
 ./WPF/Publish.ps1 -Dotnet 'C:\path\to\dotnet.exe'
 ```
@@ -64,9 +76,9 @@ Mở `MiniApps.exe` trực tiếp không tự xin quyền Admin, cho phép xem g
 - `MiniApps-net10-win-x64.zip` và `.sha256`: gói self-contained cho máy thiếu Framework 4.8.
 - `manifest-win-x64.json`: schema 2 chứa đúng hai asset, target, kiến trúc, URL release cố định, kích thước và checksum.
 
-Năm file dành cho cùng GitHub Release **v0.3.0** trong `mson-ssh/miniapp`: hai ZIP, hai checksum và một manifest. Bản đầu chỉ hỗ trợ x64; bootstrap báo rõ với x86/ARM64. Script không tự upload/push/release. Gói hiện chưa ký Authenticode; SHA-256 chống sai/hỏng nội dung, không thay thế chữ ký của nhà phát hành.
+Năm file dành cho cùng GitHub Release **v0.3.1** trong `mson-ssh/miniapp`: hai ZIP, hai checksum và một manifest. Bản đầu chỉ hỗ trợ x64; bootstrap báo rõ với x86/ARM64. Script không tự upload/push/release. Gói hiện chưa ký Authenticode; SHA-256 chống sai/hỏng nội dung, không thay thế chữ ký của nhà phát hành.
 
-Sau khi source bootstrap và release assets đã được phát hành, bootstrap dùng URL release `v0.3.0` cố định để manifest và các gói luôn thuộc cùng một phiên bản:
+Bootstrap hiện dùng URL release `v0.3.0` cố định để manifest và các gói luôn thuộc cùng một phiên bản đã phát hành:
 
 ```powershell
 irm https://raw.githubusercontent.com/mson-ssh/miniapp/main/WPF/bootstrap.ps1 | iex

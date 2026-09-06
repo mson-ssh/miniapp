@@ -121,6 +121,9 @@ public sealed class MainViewModel : Observable
     private bool hasStarted;
     public bool HasStarted { get => hasStarted; private set { Set(ref hasStarted, value); Raise(nameof(IsReady)); } }
     public bool IsReady => !HasStarted;
+    private bool installFinished;
+    public bool InstallFinished { get => installFinished; private set { if (Set(ref installFinished, value)) { Raise(nameof(InstallButtonText)); InstallCommand?.Refresh(); } } }
+    public string InstallButtonText => InstallFinished ? "Đã hoàn tất" : "Cài đặt";
     private bool optimizeStarted;
     public bool OptimizeStarted { get => optimizeStarted; private set => Set(ref optimizeStarted, value); }
     private string optimizeSummary = "Sẵn sàng xem trước quy trình tối ưu.";
@@ -176,12 +179,32 @@ public sealed class MainViewModel : Observable
     public RelayCommand RefreshDriverInfoCommand { get; }
     public RelayCommand ToggleWindowsDetailsCommand { get; }
     public RelayCommand OptimizeCommand { get; }
+    public string OptimizeNotice =>
+#if NET48
+        preview ? "Preview — không thay đổi hệ thống" : "Win11Debloat Default · không tạo restore point";
+#else
+        "Preview — không thay đổi hệ thống";
+#endif
+    public string OptimizeDescription =>
+#if NET48
+        "Áp dụng toàn bộ cấu hình Default của Win11Debloat, chỉ bỏ CreateRestorePoint. Gỡ ứng dụng mặc định; tắt telemetry, quảng cáo, Copilot, Recall, Click to Do; chỉnh taskbar và Explorer. Giữ bản sao lưu Registry. Đăng xuất hoặc khởi động lại sau khi hoàn tất.";
+#else
+        "Bản xem thử chỉ mô phỏng trạng thái; không thay đổi hệ thống.";
+#endif
+    public bool OptimizeIndeterminate => !preview && IsBusy && OptimizeStarted;
 
     public MainViewModel(bool preview = false, Func<OfficeChoice>? chooseOffice = null, Func<string, bool>? confirmDelete = null,
         Func<Task<DeviceInfo>>? readDeviceInfo = null, bool? developerEdition = null, string? settingsDirectory = null,
         bool settingsWritable = false, bool requireSettings = false)
     {
         this.preview = preview;
+#if NET48
+        OptimizeTasks.Clear();
+        OptimizeTasks.Add(new("remove-apps", "Gỡ ứng dụng mặc định", "Danh sách Apps Default do Win11Debloat xác định."));
+        OptimizeTasks.Add(new("privacy", "Quyền riêng tư & quảng cáo", "Telemetry, gợi ý Windows/Edge, màn hình khóa, Bing và Store Search."));
+        OptimizeTasks.Add(new("copilot", "Copilot & AI", "Copilot, Recall, Click to Do và tự khởi động dịch vụ AI."));
+        OptimizeTasks.Add(new("interface", "Giao diện & hệ thống", "Widgets, Chat, đuôi tệp, Drag Tray, 3D Objects và mạng Modern Standby."));
+#endif
         IsDeveloperEdition = developerEdition ?? BuildEdition.IsDeveloper;
         this.settingsWritable = IsDeveloperEdition && (settingsWritable || !preview);
         this.chooseOffice = chooseOffice ?? OfficeChoiceDialog.Ask;
@@ -201,7 +224,7 @@ public sealed class MainViewModel : Observable
         catch (Exception ex) { if (requireSettings) throw; SettingsMessage = $"Không đọc được cấu hình: {ex.Message} Đang dùng mặc định; file cũ chưa bị ghi đè."; }
         try { if (loadSettings) windowsCatalog = store.LoadWindows(requireSettings); }
         catch (Exception ex) { if (requireSettings) throw; SettingsMessage = $"Không đọc được thiết lập: {ex.Message} Đang dùng mặc định; file cũ chưa bị ghi đè."; }
-        InstallCommand = new RelayCommand(async () => await InstallAsync(), () => !IsBusy && (Apps.Count > 0 || WindowsOptions.Count > 0));
+        InstallCommand = new RelayCommand(async () => await InstallAsync(), () => !IsBusy && !InstallFinished && (Apps.Count > 0 || WindowsOptions.Count > 0));
         CancelCommand = new RelayCommand(() => { cancellation?.Cancel(); Summary = "Đang hủy hàng đợi · chờ bộ cài đang chạy kết thúc…"; }, () => IsBusy);
         SaveCommand = new RelayCommand(Save, () => IsDeveloperEdition && !IsBusy && IsCurrentDirty && !HasValidationError);
         DiscardCommand = new RelayCommand(DiscardCurrent, () => IsDeveloperEdition && !IsBusy && IsCurrentDirty);
@@ -262,6 +285,9 @@ public sealed class MainViewModel : Observable
     private async Task RunOptimizePreviewAsync()
     {
         if (IsBusy) return;
+#if NET48
+        if (!preview) { await RunOptimizeDefaultsAsync(); return; }
+#endif
         IsBusy = true;
         OptimizeStarted = true;
         OptimizeOverall = 0;
@@ -270,7 +296,7 @@ public sealed class MainViewModel : Observable
         try
         {
             var completed = 0;
-            foreach (var task in OptimizeTasks)
+            var operations = OptimizeTasks.Select(async task =>
             {
                 task.Status = "Đang phân tích · mô phỏng";
                 task.Progress = 35;
@@ -280,13 +306,62 @@ public sealed class MainViewModel : Observable
                 await Task.Delay(180);
                 task.Status = "Hoàn tất · mô phỏng";
                 task.Progress = 100;
-                completed++;
-                OptimizeOverall = completed * 100d / OptimizeTasks.Count;
-                OptimizeSummary = $"Đã mô phỏng {completed}/{OptimizeTasks.Count} nhóm · không có thay đổi nào được áp dụng";
-            }
+                var completedCount = Interlocked.Increment(ref completed);
+                OptimizeOverall = completedCount * 100d / OptimizeTasks.Count;
+                OptimizeSummary = $"Đã mô phỏng {completedCount}/{OptimizeTasks.Count} nhóm · không có thay đổi nào được áp dụng";
+            }).ToArray();
+            await Task.WhenAll(operations);
+            OptimizeOverall = 100;
+            OptimizeSummary = $"Đã mô phỏng {OptimizeTasks.Count}/{OptimizeTasks.Count} nhóm · không có thay đổi nào được áp dụng";
         }
         finally { IsBusy = false; }
     }
+#if NET48
+    private async Task RunOptimizeDefaultsAsync()
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        if (!new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))
+        {
+            OptimizeSummary = "Hãy mở MiniApps với quyền Administrator để tối ưu Windows.";
+            return;
+        }
+        using var gate = new Mutex(false, "Global\\MiniApps.Deployment");
+        bool acquired;
+        try { acquired = gate.WaitOne(0); } catch (AbandonedMutexException) { acquired = true; }
+        if (!acquired) { OptimizeSummary = "Một lượt cài đặt hoặc tối ưu khác đang chạy. Hãy chờ hoàn tất."; return; }
+        var work = Path.Combine(Path.GetTempPath(), "MiniApps", "optimize-" + Guid.NewGuid().ToString("N"));
+        IsBusy = true; OptimizeStarted = true; OptimizeOverall = 0;
+        Raise(nameof(OptimizeIndeterminate));
+        OptimizeSummary = "Đang áp dụng Win11Debloat Default · không tạo restore point";
+        foreach (var row in OptimizeTasks) { row.Status = "Đang xử lý theo cấu hình Default"; row.Progress = 0; }
+        try
+        {
+            Directory.CreateDirectory(work);
+            var script = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Scripts", "Optimize-Defaults.ps1");
+            if (!File.Exists(script)) throw new FileNotFoundException("Thiếu script Optimize.", script);
+            var code = await DeploymentService.RunPowerShellAsync("Set-Location -LiteralPath '" + work.Replace("'", "''") + "'; & '" + script.Replace("'", "''") + "'", work, new Progress<string>(Log));
+            if (code != 0) throw new InvalidOperationException("Win11Debloat báo lỗi; xem nhật ký tại %LocalAppData%\\MiniApps\\OptimizeLogs.");
+            OptimizeOverall = 100;
+            foreach (var row in OptimizeTasks) { row.Status = "Đã xử lý theo Default"; row.Progress = 100; }
+            OptimizeSummary = "Hoàn tất Default · đăng xuất hoặc khởi động lại để áp dụng đầy đủ. Nhật ký: %LocalAppData%\\MiniApps\\OptimizeLogs";
+        }
+        catch (Exception ex)
+        {
+            Log(ex.ToString()); OptimizeSummary = "Tối ưu chưa hoàn tất: " + ex.Message;
+            foreach (var row in OptimizeTasks) row.Status = "Chưa xác nhận hoàn tất · xem nhật ký";
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(work) && Directory.GetDirectories(work, "Backups", SearchOption.AllDirectories).Length == 0) Directory.Delete(work, true);
+                else if (Directory.Exists(work)) Log("Giữ tệp tối ưu để bảo toàn bản sao lưu Registry: " + work);
+            }
+            catch (Exception ex) { Log("Chưa dọn hết tệp tối ưu: " + ex.Message); }
+            IsBusy = false; Raise(nameof(OptimizeIndeterminate)); gate.ReleaseMutex();
+        }
+    }
+#endif
     private void RebuildRows()
     {
         Apps.Clear();
@@ -503,6 +578,7 @@ public sealed class MainViewModel : Observable
         var workDir = Path.Combine(Path.GetTempPath(), "MiniApps", "work-" + Guid.NewGuid().ToString("N"));
         var session = Environment.GetEnvironmentVariable("MINIAPPS_SESSION");
         var marker = !preview && !string.IsNullOrEmpty(session) ? Path.Combine(session, "installing") : null;
+        var runCompleted = false;
         try
         {
             if (marker != null) File.WriteAllText(marker, "Do not clean until process tree exits.");
@@ -531,6 +607,7 @@ public sealed class MainViewModel : Observable
             // Drain progress callbacks before composing the final summary.
             await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Background);
             Summary = cancellation.IsCancellationRequested ? "Đã dừng · bộ cài đang chạy đã kết thúc an toàn." : $"Hoàn tất · {finished.Count}/{total} tác vụ · {failed.Count} lỗi";
+            runCompleted = !cancellation.IsCancellationRequested;
         }
         catch (OperationCanceledException) { Summary = "Đã hủy lượt chạy."; }
         catch (Exception ex) { Log(ex.ToString()); Summary = "Có lỗi trong quá trình cài đặt."; }
@@ -538,7 +615,7 @@ public sealed class MainViewModel : Observable
         {
             try { if (Directory.Exists(workDir)) Directory.Delete(workDir, true); }
             catch (Exception ex) { Log("Chưa dọn hết bộ cài tạm: " + ex.Message); }
-            cancellation.Dispose(); cancellation = null; IsBusy = false;
+            cancellation.Dispose(); cancellation = null; InstallFinished = runCompleted; IsBusy = false;
             if (marker != null) { try { File.Delete(marker); } catch (IOException) { } }
             deploymentLock.ReleaseMutex();
         }
