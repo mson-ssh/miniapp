@@ -17,6 +17,19 @@ Bản nâng cấp độc lập trong `WPF/`; không sửa hoặc thực thi `../
 - Settings tại `%LocalAppData%\MiniApps\apps.json` và `windows.json`, không bị bootstrap xóa. File mới lưu `SchemaVersion`, danh sách cấu hình và ID mặc định đã xóa. Mảng JSON từ bản cũ được đọc như schema 1; Info.exe của schema 2 được thêm trong bộ nhớ đúng một lần, còn mục cũ đã xóa và nội dung đã sửa được bảo toàn khi lưu. Không tự ghi đè file lỗi hoặc schema mới hơn khi khởi động.
 - Script tùy chỉnh là **mã thực thi tin cậy do người dùng cấu hình**, chạy với quyền Admin trong Windows PowerShell 5.1 sau lựa chọn và xác nhận Office/WPS. Không chạy khi lưu hoặc preview. Không dùng Read-Host/prompt; kiểm tra `$LASTEXITCODE` sau lệnh native và dùng `throw`/`exit` khác 0 khi lỗi. Script ghi UTF-8 BOM trong thư mục phiên và chạy như file, không ghép vào chuỗi lệnh. Không tự phân tích tác động hay bảo đảm rollback của script người dùng; script lỗi cú pháp sẽ báo khi chạy.
 
+## Kế hoạch tách bản Developer và Public
+
+> Trạng thái: đã chốt thiết kế, chưa triển khai trong `v0.2.0` hiện tại.
+
+- **Developer** chỉ dùng trên máy phát triển, build `net48` với `MiniAppsEdition=Developer`. Sidebar có đủ **Install app**, **Optimize Windows**, **Driver** và **Setting**. Setting tiếp tục quản lý hai nhóm **Ứng dụng** và **Thiết lập Windows**.
+- **Public** là bản người dùng nhận qua `irm`, build với `MiniAppsEdition=Public`. Sidebar chỉ có **Install app**, **Optimize Windows** và **Driver**. ViewModel cũng từ chối điều hướng tới Setting và vô hiệu hóa toàn bộ lệnh thêm/sửa/xóa/lưu; bản Public không có tham số dòng lệnh để bật lại Setting.
+- Cấu hình phát hành chuẩn nằm trong `WPF/ReleaseConfig/apps.json` và `WPF/ReleaseConfig/windows.json`. Bản Developer đọc/ghi hai file này; bản Public chỉ đọc bản sao đã được đóng gói cùng ứng dụng và không dùng cấu hình `%LocalAppData%` của máy khách.
+- `Preview.ps1 -Developer` sẽ build/mở đúng bản net48 Developer và truyền đường dẫn cấu hình trong workspace. `Publish.ps1` luôn build Public, kiểm tra schema, ID trùng, URL HTTPS, script rỗng và SHA-256 trước khi tạo gói; cấu hình thiếu hoặc không hợp lệ làm publish thất bại.
+- File cấu hình được ghi atomic. Bản Public dừng trước khi cài nếu cấu hình đóng gói thiếu hoặc hỏng, thay vì âm thầm dùng catalog khác.
+- Giai đoạn đầu chỉ triển khai và kiểm thử luồng Developer/Public trên `net48`. Mã nguồn dual-runtime vẫn được giữ; đóng gói/cập nhật net10 thực hiện ở giai đoạn phát hành sau.
+
+Điều kiện nghiệm thu: Developer có bốn mục sidebar và lưu được cấu hình; Public chỉ có ba mục, không thể truy cập Setting bằng UI hoặc bằng cách gán trang; Public không tạo/sửa cấu hình trong `%LocalAppData%`; cấu hình Developer đã lưu xuất hiện đúng trong bản Public; các test Install app, tiến trình, Driver và Optimize hiện tại vẫn đạt.
+
 ## Build và xem thử
 
 Máy phát triển dùng .NET SDK 10 để build chung source cho `net48` và `net10.0-windows`. Máy khách dùng **Windows 10 1809/build 17763 trở lên hoặc Windows 11**. Bootstrap đọc .NET Framework trong Registry: máy có Release `>= 528040` tải gói `net48` nhỏ; máy thiếu Framework 4.8 tải gói .NET 10 self-contained. Fallback mang runtime trong thư mục phiên và không cài runtime vào Windows.
