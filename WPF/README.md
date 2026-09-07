@@ -1,4 +1,4 @@
-# MiniApps Desktop — WPF v0.3.1 / dual runtime
+# MiniApps Desktop — WPF v0.3.2 / dual runtime
 
 Máy mới / phiên AI mới: đọc [AGENTS.md](AGENTS.md) và [bộ tài liệu kỹ thuật](docs/README.md) trước khi sửa hoặc chạy dự án. Nên mở `WPF/` làm workspace; trạng thái bàn giao nằm trong [CURRENT-STATE.md](docs/CURRENT-STATE.md).
 
@@ -6,11 +6,11 @@ Máy mới / phiên AI mới: đọc [AGENTS.md](AGENTS.md) và [bộ tài liệ
 
 ## Optimize trên .NET Framework 4.8
 
-Optimize dùng Default của [Win11Debloat](https://github.com/Raphire/Win11Debloat/tree/6012b02ea282f23ea943946206762fd430025c6f), cố định commit `6012b02ea282f23ea943946206762fd430025c6f` và kiểm tra SHA-256 trước khi giải nén. Chỉ loại `CreateRestorePoint` khỏi `Config/DefaultSettings.json`; giữ danh sách gỡ ứng dụng Default và 16 thiết lập còn lại. Không dùng Default Lite.
+Optimize dùng Default của [Win11Debloat](https://github.com/Raphire/Win11Debloat/tree/6012b02ea282f23ea943946206762fd430025c6f), tải qua HTTPS từ commit cố định `6012b02ea282f23ea943946206762fd430025c6f` nhưng không kiểm tra SHA-256 của ZIP upstream. Sau giải nén vẫn kiểm tra schema cấu hình và điểm gắn bridge trước khi chạy. Chỉ loại `CreateRestorePoint` khỏi `Config/DefaultSettings.json`; giữ danh sách gỡ ứng dụng Default và 16 thiết lập còn lại. Không dùng Default Lite. Việc xác minh SHA-256 gói phát hành MiniApps trong bootstrap không thay đổi.
 
 Một lần bấm áp dụng toàn bộ profile qua một tiến trình upstream; giữ thứ tự nội bộ của upstream để tránh xung đột Registry/Appx. Không hiển thị phần trăm giả trong lượt chạy thật: thanh tiến trình chạy không xác định tới khi tiến trình kết thúc. Yêu cầu Administrator; khóa phiên cài đặt/tối ưu đang chạy khác. Không tự khởi động lại Explorer; đăng xuất hoặc khởi động lại sau khi hoàn tất.
 
-Nhật ký và bản sao lưu Registry được giữ ở `%LocalAppData%\MiniApps\OptimizeLogs`. Tệp tải về được dọn sau khi chạy; nếu không lưu được backup thì giữ thư mục làm việc để bảo toàn backup. Developer preview chỉ mô phỏng, không tải hay thực thi Win11Debloat. Chưa kiểm chứng thay đổi hệ thống thực tế trên VM Windows 10/11.
+Mỗi lượt chạy tạo thư mục nhật ký riêng ngay trước khi tải trong `%LocalAppData%\MiniApps\OptimizeLogs`; lỗi tải/chuẩn bị và stderr thực thi được giữ tại đó. Bản sao lưu Registry cũng được chuyển vào thư mục lượt chạy. Tệp tải về được dọn sau khi chạy; nếu không lưu được backup thì giữ thư mục làm việc để bảo toàn backup. Developer preview chỉ mô phỏng, không tải hay thực thi Win11Debloat. Chưa kiểm chứng thay đổi hệ thống thực tế trên VM Windows 10/11.
 
 Quy trình phát triển: cập nhật và kiểm thử net48 trước. Chỉ đồng bộ/build net10 hoặc push GitHub/phát hành khi người dùng yêu cầu riêng. Phần mô tả Optimize preview bên dưới phản ánh bản net10 cũ; net48 áp dụng luồng mới nêu trên.
 

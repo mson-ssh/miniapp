@@ -10,7 +10,7 @@ public enum OptimizeStage
 {
     Ready,
     Downloading,
-    Verifying,
+    Preparing,
     Applying,
     Completed,
     Error
@@ -76,12 +76,25 @@ public sealed class OptimizeService : IOptimizeService
             var lastStage = OptimizeStage.Ready;
             var logDirectory = "";
             var taskStates = new Dictionary<string, OptimizeTaskEvent>(StringComparer.OrdinalIgnoreCase);
+            var processOutput = new List<string>();
+            var processOutputLock = new object();
             try
             {
                 var callerContext = SynchronizationContext.Current;
                 var output = new CallbackProgress<string>(line =>
                 {
-                    if (!TryParseProtocolLine(line, out var item)) return;
+                    if (!TryParseProtocolLine(line, out var item))
+                    {
+                        if (!string.IsNullOrWhiteSpace(line))
+                        {
+                            lock (processOutputLock)
+                            {
+                                processOutput.Add(line.Trim());
+                                if (processOutput.Count > 40) processOutput.RemoveAt(0);
+                            }
+                        }
+                        return;
+                    }
                     if (!string.IsNullOrWhiteSpace(item.LogDirectory)) logDirectory = item.LogDirectory;
                     // The script's Completed marker means its process reached the end. Only the
                     // service may publish Completed after validating every task result below.
@@ -97,7 +110,7 @@ public sealed class OptimizeService : IOptimizeService
                 var code = await runPowerShell(command, work, output);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (code != 0)
-                    throw new InvalidOperationException($"Win11Debloat báo lỗi ở bước {StageLabel(lastStage)} (mã {code}).");
+                    throw new InvalidOperationException($"Win11Debloat báo lỗi ở bước {StageLabel(lastStage)} (mã {code}).{PowerShellDetail(processOutput, processOutputLock)}");
                 var failedTasks = taskStates.Where(item => item.Value == OptimizeTaskEvent.Error).Select(item => item.Key).ToArray();
                 if (failedTasks.Length > 0)
                     throw new InvalidOperationException($"{failedTasks.Length} tác vụ báo lỗi: {string.Join(", ", failedTasks)}.");
@@ -115,7 +128,10 @@ public sealed class OptimizeService : IOptimizeService
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                var message = $"Không thể hoàn tất ở bước {StageLabel(lastStage)}: {ex.Message}";
+                var detail = ex is InvalidOperationException && ex.Message.Contains("Chi tiết PowerShell:")
+                    ? ""
+                    : PowerShellDetail(processOutput, processOutputLock);
+                var message = $"Không thể hoàn tất ở bước {StageLabel(lastStage)}: {ex.Message}{detail}";
                 progress.Report(new(OptimizeStage.Error, message, logDirectory));
                 return new(false, message, logDirectory);
             }
@@ -178,7 +194,7 @@ public sealed class OptimizeService : IOptimizeService
     private static string StageMessage(OptimizeStage stage) => stage switch
     {
         OptimizeStage.Downloading => "Đang tải cấu hình Win11Debloat đã được ghim…",
-        OptimizeStage.Verifying => "Đang xác minh tính toàn vẹn của gói tải về…",
+        OptimizeStage.Preparing => "Đang chuẩn bị cấu hình Win11Debloat…",
         OptimizeStage.Applying => "Đang áp dụng cấu hình Default…",
         OptimizeStage.Completed => "Đã tối ưu Windows.",
         OptimizeStage.Error => "Không thể hoàn tất tối ưu.",
@@ -188,7 +204,7 @@ public sealed class OptimizeService : IOptimizeService
     private static string StageLabel(OptimizeStage stage) => stage switch
     {
         OptimizeStage.Downloading => "tải xuống",
-        OptimizeStage.Verifying => "xác minh",
+        OptimizeStage.Preparing => "chuẩn bị",
         OptimizeStage.Applying => "áp dụng",
         _ => "chuẩn bị"
     };
@@ -200,6 +216,15 @@ public sealed class OptimizeService : IOptimizeService
     }
 
     private static string EscapePowerShell(string value) => value.Replace("'", "''");
+
+    private static string PowerShellDetail(List<string> lines, object sync)
+    {
+        string detail;
+        lock (sync) detail = string.Join(Environment.NewLine, lines);
+        if (string.IsNullOrWhiteSpace(detail)) return "";
+        if (detail.Length > 4000) detail = detail.Substring(detail.Length - 4000);
+        return Environment.NewLine + "Chi tiết PowerShell: " + detail;
+    }
 
     private static void TryCleanWorkDirectory(string work)
     {
@@ -225,14 +250,14 @@ public sealed class OptimizePreviewService : IOptimizeService
 
     public async Task<OptimizeResult> RunAsync(IProgress<OptimizeProgress> progress, CancellationToken cancellationToken)
     {
-        var stages = new[] { OptimizeStage.Downloading, OptimizeStage.Verifying, OptimizeStage.Applying };
+        var stages = new[] { OptimizeStage.Downloading, OptimizeStage.Preparing, OptimizeStage.Applying };
         foreach (var stage in stages)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var item = new OptimizeProgress(stage, stage switch
             {
                 OptimizeStage.Downloading => "Đang mô phỏng tải gói cấu hình…",
-                OptimizeStage.Verifying => "Đang mô phỏng xác minh gói tải về…",
+                OptimizeStage.Preparing => "Đang mô phỏng chuẩn bị cấu hình…",
                 _ => "Đang mô phỏng áp dụng toàn bộ cấu hình…"
             });
             progress.Report(item);

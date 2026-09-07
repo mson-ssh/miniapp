@@ -235,9 +235,9 @@ try
         Assert(MainViewModel.IsDebloat(new WindowsSettingDefinition { Id = "Debloat", Action = "Custom" }));
         vm.InstallCommand.Execute(null); Assert(!vm.HasStarted && vm.SystemTasks.Count == 0);
     });
-    Check("Optimize protocol exposes real download, verify and apply stages", () => {
+    Check("Optimize protocol exposes real download, prepare and apply stages", () => {
         Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_STAGE:Downloading", out var download) && download.Stage == OptimizeStage.Downloading);
-        Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_STAGE:Verifying", out var verify) && verify.Stage == OptimizeStage.Verifying);
+        Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_STAGE:Preparing", out var prepare) && prepare.Stage == OptimizeStage.Preparing);
         Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_STAGE:Applying", out var apply) && apply.Stage == OptimizeStage.Applying);
         Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_LOG:C:\\Logs", out var log) && log.LogDirectory == "C:\\Logs");
         Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_TASK_JSON:{\"event\":\"START\",\"id\":\"DisableTelemetry\",\"message\":\"running\"}", out var task) && task.Task?.Event == OptimizeTaskEvent.Start && task.Task.Id == "DisableTelemetry");
@@ -274,16 +274,18 @@ try
         var result = service.RunAsync(new InlineProgress<OptimizeProgress>(_ => { }), default).GetAwaiter().GetResult();
         Assert(!result.Succeeded && result.Message.Contains("1 tác vụ báo lỗi") && result.Message.Contains("DisableRecall"));
     });
-    Check("Optimize service reports runner failure at the actual stage without executing a script", () => {
+    Check("Optimize service reports real runner output and durable log for prepare failure", () => {
         var fixture = Path.Combine(root, "optimize-runner"); Directory.CreateDirectory(fixture);
         var script = Path.Combine(fixture, "Optimize-Defaults.ps1"); File.WriteAllText(script, "fixture only");
+        var durableLog = Path.Combine(fixture, "durable-log"); Directory.CreateDirectory(durableLog);
         var stages = new List<OptimizeStage>();
         var service = new OptimizeService(
             runPowerShell: (_, work, output) => {
                 Assert(work.StartsWith(fixture, StringComparison.OrdinalIgnoreCase));
+                output.Report("MINIAPPS_LOG:" + durableLog);
                 output.Report("MINIAPPS_STAGE:Downloading");
-                output.Report("MINIAPPS_STAGE:Verifying");
-                output.Report("MINIAPPS_STAGE:Applying");
+                output.Report("MINIAPPS_STAGE:Preparing");
+                output.Report("Expand-Archive : The archive file is invalid.");
                 return Task.FromResult(9);
             },
             isAdministrator: () => true,
@@ -291,15 +293,15 @@ try
             scriptPath: script,
             tempRoot: fixture);
         var result = service.RunAsync(new InlineProgress<OptimizeProgress>(p => stages.Add(p.Stage)), default).GetAwaiter().GetResult();
-        Assert(!result.Succeeded && result.Message.Contains("áp dụng") && stages.Contains(OptimizeStage.Error));
-        Assert(stages.Take(3).SequenceEqual(new[] { OptimizeStage.Downloading, OptimizeStage.Verifying, OptimizeStage.Applying }));
+        Assert(!result.Succeeded && result.Message.Contains("chuẩn bị") && result.Message.Contains("archive file is invalid") && result.LogDirectory == durableLog && stages.Contains(OptimizeStage.Error));
+        Assert(stages.Where(stage => stage != OptimizeStage.Ready && stage != OptimizeStage.Error).SequenceEqual(new[] { OptimizeStage.Downloading, OptimizeStage.Preparing }));
         Assert(Directory.GetDirectories(fixture, "optimize-*").Length == 0);
     });
     Check("Optimize lifecycle locks conflicting actions and completes once", () => {
         var release = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var fake = new FakeOptimizeService(async progress => {
             progress.Report(new(OptimizeStage.Downloading, "download"));
-            progress.Report(new(OptimizeStage.Verifying, "verify"));
+            progress.Report(new(OptimizeStage.Preparing, "prepare"));
             progress.Report(new(OptimizeStage.Applying, "apply"));
             var tasks = OptimizeTaskCatalog.Defaults();
             foreach (var task in tasks) progress.Report(new(OptimizeStage.Ready, "", "", new(OptimizeTaskEvent.Queued, task.Id, "Đang chờ")));
@@ -340,14 +342,14 @@ try
         var attempts = 0;
         var fake = new FakeOptimizeService(progress => {
             attempts++;
-            progress.Report(new(OptimizeStage.Verifying, "verify"));
-            return Task.FromResult(new OptimizeResult(false, "Checksum không hợp lệ ở bước xác minh.", ""));
+            progress.Report(new(OptimizeStage.Preparing, "prepare"));
+            return Task.FromResult(new OptimizeResult(false, "Không thể giải nén ở bước chuẩn bị.", ""));
         });
         var vm = new MainViewModel(false, developerEdition: false, optimizeService: fake) { Page = 1 };
         vm.OptimizeCommand.Execute(null);
         if (!SpinWait.SpinUntil(() => !vm.IsBusy && attempts == 1, TimeSpan.FromSeconds(2)))
             throw new Exception($"First failure run timed out: attempts={attempts}, busy={vm.IsBusy}, stage={vm.OptimizeStage}");
-        if (vm.OptimizeFinished || vm.OptimizeStage != OptimizeStage.Error || !vm.OptimizeSummary.Contains("xác minh") || !vm.OptimizeCommand.CanExecute(null))
+        if (vm.OptimizeFinished || vm.OptimizeStage != OptimizeStage.Error || !vm.OptimizeSummary.Contains("chuẩn bị") || !vm.OptimizeCommand.CanExecute(null))
             throw new Exception($"Unexpected retry state: finished={vm.OptimizeFinished}, stage={vm.OptimizeStage}, busy={vm.IsBusy}, command={vm.OptimizeCommand.CanExecute(null)}, summary={vm.OptimizeSummary}");
         vm.OptimizeCommand.Execute(null);
         if (!SpinWait.SpinUntil(() => attempts == 2 && vm.OptimizeStage == OptimizeStage.Error && !vm.IsBusy, TimeSpan.FromSeconds(2)))

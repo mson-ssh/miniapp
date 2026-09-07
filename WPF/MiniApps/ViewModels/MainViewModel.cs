@@ -148,7 +148,7 @@ public sealed class MainViewModel : Observable
     public string OptimizeStageText => OptimizeStage switch
     {
         OptimizeStage.Downloading => "ĐANG TẢI",
-        OptimizeStage.Verifying => "ĐANG XÁC MINH",
+        OptimizeStage.Preparing => "ĐANG CHUẨN BỊ",
         OptimizeStage.Applying => "ĐANG ÁP DỤNG",
         OptimizeStage.Completed => preview ? "ĐÃ XEM TRƯỚC" : "HOÀN TẤT",
         OptimizeStage.Error => "CÓ LỖI",
