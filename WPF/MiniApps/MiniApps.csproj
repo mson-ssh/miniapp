@@ -11,7 +11,7 @@
     <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>MiniApps</AssemblyName>
-    <Version>0.3.2</Version>
+    <Version>0.3.3</Version>
     <MiniAppsEdition Condition="'$(MiniAppsEdition)' == ''">Developer</MiniAppsEdition>
     <DefineConstants Condition="'$(MiniAppsEdition)' == 'Developer'">$(DefineConstants);MINIAPPS_DEVELOPER</DefineConstants>
   </PropertyGroup>
@@ -27,5 +27,6 @@
   <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
     <Content Remove="Scripts\Optimize-Defaults.ps1" />
     <Content Remove="Scripts\Optimize-TaskBridge.ps1" />
+    <Content Remove="Scripts\Expand-OptimizeArchive.ps1" />
   </ItemGroup>
 </Project>

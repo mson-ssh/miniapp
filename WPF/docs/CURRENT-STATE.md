@@ -1,10 +1,16 @@
 # Trạng thái bàn giao
 
+## Chuẩn bị v0.3.3 — 2026-09-07
+
+Đóng gói bản sửa đường dẫn giải nén Optimize cho net48 theo yêu cầu phát hành để test irm. Net10 giữ nguyên byte của v0.3.0. Các kết quả fixture bên dưới không thay thế kiểm thử Optimize thật trên máy người dùng; trạng thái phát hành được cập nhật sau khi xác minh asset GitHub.
+
 ## Bản sửa v0.3.2 — 2026-09-07
 
 Đã phát hành: source `3025994bf376f87e13532f0bc264e957121ecb32`, ZIP net48 494415 bytes, SHA-256 `6541d26aca87cdf292297a738a8687c9ed9f4db546ef8839499c21aa11cf1100`. Đã xác minh metadata hash/size của asset trên GitHub và tải lại net48. Bootstrap chuyển sang v0.3.2 sau khi asset có sẵn. Các mục release bên dưới là lịch sử.
 
 Theo yêu cầu người dùng: Optimize net48 bỏ SHA-256 của ZIP Win11Debloat, giữ commit HTTPS cố định và các bước chuẩn bị bắt buộc. Luồng UI/preview là Downloading → Preparing → Applying. Log tạo theo phiên trước khi tải; lỗi PowerShell gốc được lưu và hiển thị. Bootstrap vẫn kiểm tra SHA-256/kích thước gói MiniApps. Build net48 sạch, 59 logic tests và 6 kiểm tra WPF đạt, bao gồm lỗi chuẩn bị và retry; fixture bridge và cú pháp PowerShell đạt. Không chạy tối ưu thật trên máy phát triển. Net10 tiếp tục dùng nguyên artifact v0.3.0, không rebuild.
+
+Bản sửa local tiếp theo xử lý lỗi `Expand-Archive` của lượt `irm` khi đường dẫn file upstream đạt 270 ký tự: service dùng leaf phiên ngắn `o-<12 ký tự>` và helper mới giải nén an toàn, bỏ root ZIP đã ghim vào `src`. Helper preflight root/traversal/containment/tên trùng hoặc không hợp lệ/giới hạn đường dẫn trước khi ghi, staging toàn bộ rồi mới đưa vào đích và không để lỗi cleanup che lỗi gốc. Fixture nested giảm đường dẫn tái hiện từ 286 xuống 204 ký tự; ZIP thật đã ghim giải nén extraction-only 403 file, dài nhất 221 ký tự. Build net48 sạch, 59 logic tests, 6 kiểm tra WPF, fixture archive và bridge đều đạt; không chạy entry point Win11Debloat hay thay đổi hệ thống. Chưa build/test net10, chưa commit, push hoặc phát hành.
 
 ## Phát hành v0.3.1
 

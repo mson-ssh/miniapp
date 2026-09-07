@@ -1,6 +1,6 @@
 param(
     [ValidateSet('win-x64')][string]$Runtime = 'win-x64',
-    [ValidatePattern('^[a-zA-Z0-9._-]+$')][string]$Version = '0.3.2',
+    [ValidatePattern('^[a-zA-Z0-9._-]+$')][string]$Version = '0.3.3',
     [ValidateSet('net48','both')][string]$Target = 'net48',
     [string]$Dotnet = 'dotnet'
 )

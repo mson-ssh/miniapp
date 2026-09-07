@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $commit = '6012b02ea282f23ea943946206762fd430025c6f'
+. (Join-Path $PSScriptRoot 'Expand-OptimizeArchive.ps1')
 
 # Create a durable, session-specific diagnostic location before any network work.
 $logRoot = Join-Path $env:LOCALAPPDATA 'MiniApps\OptimizeLogs'
@@ -16,14 +17,15 @@ try {
 } catch { }
 
 $zip = Join-Path $PWD 'upstream.zip'
-$root = $null
+$root = Join-Path $PWD 'src'
+$primaryError = $null
+$backupError = $null
 try {
     Write-Output 'MINIAPPS_STAGE:Downloading'
     Invoke-WebRequest "https://github.com/Raphire/Win11Debloat/archive/$commit.zip" -OutFile $zip -UseBasicParsing -TimeoutSec 600
 
     Write-Output 'MINIAPPS_STAGE:Preparing'
-    Expand-Archive -LiteralPath $zip -DestinationPath $PWD
-    $root = Join-Path $PWD "Win11Debloat-$commit"
+    Expand-MiniAppsOptimizeArchive -ArchivePath $zip -DestinationPath $root -ExpectedRoot "Win11Debloat-$commit"
     $defaultsPath = Join-Path $root 'Config\DefaultSettings.json'
     $defaults = Get-Content -LiteralPath $defaultsPath -Raw | ConvertFrom-Json
     if ($defaults.Version -ne '1.0') { throw 'Unexpected default profile schema.' }
@@ -47,19 +49,25 @@ try {
     $errors = if (Test-Path -LiteralPath $stderr) { Get-Content -LiteralPath $stderr -Raw } else { '' }
     if ($code -ne 0 -or -not [string]::IsNullOrWhiteSpace($errors)) { throw "Win11Debloat reported errors (exit $code): $errors" }
 
-    Write-Output 'MINIAPPS_STAGE:Completed'
-    Write-Output 'Default profile completed. Sign out or restart Windows to apply all changes.'
 }
 catch {
     try { ($_ | Out-String).Trim() | Set-Content -LiteralPath (Join-Path $logs 'failure.txt') -Encoding UTF8 } catch { }
-    throw
+    $primaryError = $_
 }
 finally {
     if ($root) {
         $backup = Join-Path $root 'Backups'
         if (Test-Path -LiteralPath $backup) {
-            Move-Item -LiteralPath $backup -Destination (Join-Path $logs 'Backups') -ErrorAction Stop
+            try { Move-Item -LiteralPath $backup -Destination (Join-Path $logs 'Backups') -ErrorAction Stop }
+            catch {
+                $backupError = $_
+                try { ($_ | Out-String).Trim() | Set-Content -LiteralPath (Join-Path $logs 'backup-failure.txt') -Encoding UTF8 } catch { }
+            }
         }
     }
     if ($transcriptStarted) { try { Stop-Transcript | Out-Null } catch { } }
 }
+if ($primaryError) { throw $primaryError }
+if ($backupError) { throw $backupError }
+Write-Output 'MINIAPPS_STAGE:Completed'
+Write-Output 'Default profile completed. Sign out or restart Windows to apply all changes.'

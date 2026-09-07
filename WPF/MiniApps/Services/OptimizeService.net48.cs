@@ -71,7 +71,9 @@ public sealed class OptimizeService : IOptimizeService
             if (!File.Exists(scriptPath))
                 return new(false, "Thiếu script Optimize của MiniApps.", "");
 
-            var work = Path.Combine(tempRoot, "optimize-" + Guid.NewGuid().ToString("N"));
+            // The bootstrap already nests MiniApps under its owned session directory. Keep this
+            // leaf unique for direct launches too, but short enough for legacy MAX_PATH APIs.
+            var work = Path.Combine(tempRoot, "o-" + Guid.NewGuid().ToString("N").Substring(0, 12));
             Directory.CreateDirectory(work);
             var lastStage = OptimizeStage.Ready;
             var logDirectory = "";
