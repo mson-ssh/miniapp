@@ -1,9 +1,7 @@
-# MiniApps net48: pinned Win11Debloat default profile, excluding restore points.
+# MiniApps net48: bundled, pinned Win11Debloat default profile, excluding restore points.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-$commit = '6012b02ea282f23ea943946206762fd430025c6f'
-. (Join-Path $PSScriptRoot 'Expand-OptimizeArchive.ps1')
+. (Join-Path $PSScriptRoot 'Copy-OptimizeEngine.ps1')
 
 # Create a durable, session-specific diagnostic location before any network work.
 $logRoot = Join-Path $env:LOCALAPPDATA 'MiniApps\OptimizeLogs'
@@ -16,16 +14,13 @@ try {
     $transcriptStarted = $true
 } catch { }
 
-$zip = Join-Path $PWD 'upstream.zip'
 $root = Join-Path $PWD 'src'
 $primaryError = $null
 $backupError = $null
 try {
-    Write-Output 'MINIAPPS_STAGE:Downloading'
-    Invoke-WebRequest "https://github.com/Raphire/Win11Debloat/archive/$commit.zip" -OutFile $zip -UseBasicParsing -TimeoutSec 600
-
     Write-Output 'MINIAPPS_STAGE:Preparing'
-    Expand-MiniAppsOptimizeArchive -ArchivePath $zip -DestinationPath $root -ExpectedRoot "Win11Debloat-$commit"
+    $bundledEngine = Join-Path (Split-Path -Parent $PSScriptRoot) 'Engine\Debloat'
+    Copy-MiniAppsOptimizeEngine -SourcePath $bundledEngine -DestinationPath $root
     $defaultsPath = Join-Path $root 'Config\DefaultSettings.json'
     $defaults = Get-Content -LiteralPath $defaultsPath -Raw | ConvertFrom-Json
     if ($defaults.Version -ne '1.0') { throw 'Unexpected default profile schema.' }

@@ -235,8 +235,7 @@ try
         Assert(MainViewModel.IsDebloat(new WindowsSettingDefinition { Id = "Debloat", Action = "Custom" }));
         vm.InstallCommand.Execute(null); Assert(!vm.HasStarted && vm.SystemTasks.Count == 0);
     });
-    Check("Optimize protocol exposes real download, prepare and apply stages", () => {
-        Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_STAGE:Downloading", out var download) && download.Stage == OptimizeStage.Downloading);
+    Check("Optimize protocol exposes bundled-engine prepare and apply stages", () => {
         Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_STAGE:Preparing", out var prepare) && prepare.Stage == OptimizeStage.Preparing);
         Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_STAGE:Applying", out var apply) && apply.Stage == OptimizeStage.Applying);
         Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_LOG:C:\\Logs", out var log) && log.LogDirectory == "C:\\Logs");
@@ -283,9 +282,8 @@ try
             runPowerShell: (_, work, output) => {
                 Assert(work.StartsWith(fixture, StringComparison.OrdinalIgnoreCase));
                 output.Report("MINIAPPS_LOG:" + durableLog);
-                output.Report("MINIAPPS_STAGE:Downloading");
                 output.Report("MINIAPPS_STAGE:Preparing");
-                output.Report("Expand-Archive : The archive file is invalid.");
+                output.Report("Bundled Win11Debloat engine is incomplete: missing Config\\Apps.json");
                 return Task.FromResult(9);
             },
             isAdministrator: () => true,
@@ -293,14 +291,13 @@ try
             scriptPath: script,
             tempRoot: fixture);
         var result = service.RunAsync(new InlineProgress<OptimizeProgress>(p => stages.Add(p.Stage)), default).GetAwaiter().GetResult();
-        Assert(!result.Succeeded && result.Message.Contains("chuẩn bị") && result.Message.Contains("archive file is invalid") && result.LogDirectory == durableLog && stages.Contains(OptimizeStage.Error));
-        Assert(stages.Where(stage => stage != OptimizeStage.Ready && stage != OptimizeStage.Error).SequenceEqual(new[] { OptimizeStage.Downloading, OptimizeStage.Preparing }));
+        Assert(!result.Succeeded && result.Message.Contains("chuẩn bị") && result.Message.Contains("Bundled Win11Debloat engine is incomplete") && result.LogDirectory == durableLog && stages.Contains(OptimizeStage.Error));
+        Assert(stages.Where(stage => stage != OptimizeStage.Ready && stage != OptimizeStage.Error).SequenceEqual(new[] { OptimizeStage.Preparing }));
         Assert(Directory.GetDirectories(fixture, "optimize-*").Length == 0);
     });
     Check("Optimize lifecycle locks conflicting actions and completes once", () => {
         var release = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var fake = new FakeOptimizeService(async progress => {
-            progress.Report(new(OptimizeStage.Downloading, "download"));
             progress.Report(new(OptimizeStage.Preparing, "prepare"));
             progress.Report(new(OptimizeStage.Applying, "apply"));
             var tasks = OptimizeTaskCatalog.Defaults();

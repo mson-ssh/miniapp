@@ -195,7 +195,6 @@ public sealed class OptimizeService : IOptimizeService
 
     private static string StageMessage(OptimizeStage stage) => stage switch
     {
-        OptimizeStage.Downloading => "Đang tải cấu hình Win11Debloat đã được ghim…",
         OptimizeStage.Preparing => "Đang chuẩn bị cấu hình Win11Debloat…",
         OptimizeStage.Applying => "Đang áp dụng cấu hình Default…",
         OptimizeStage.Completed => "Đã tối ưu Windows.",
@@ -205,7 +204,6 @@ public sealed class OptimizeService : IOptimizeService
 
     private static string StageLabel(OptimizeStage stage) => stage switch
     {
-        OptimizeStage.Downloading => "tải xuống",
         OptimizeStage.Preparing => "chuẩn bị",
         OptimizeStage.Applying => "áp dụng",
         _ => "chuẩn bị"
@@ -252,13 +250,12 @@ public sealed class OptimizePreviewService : IOptimizeService
 
     public async Task<OptimizeResult> RunAsync(IProgress<OptimizeProgress> progress, CancellationToken cancellationToken)
     {
-        var stages = new[] { OptimizeStage.Downloading, OptimizeStage.Preparing, OptimizeStage.Applying };
+        var stages = new[] { OptimizeStage.Preparing, OptimizeStage.Applying };
         foreach (var stage in stages)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var item = new OptimizeProgress(stage, stage switch
             {
-                OptimizeStage.Downloading => "Đang mô phỏng tải gói cấu hình…",
                 OptimizeStage.Preparing => "Đang mô phỏng chuẩn bị cấu hình…",
                 _ => "Đang mô phỏng áp dụng toàn bộ cấu hình…"
             });

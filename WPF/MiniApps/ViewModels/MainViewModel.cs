@@ -147,7 +147,6 @@ public sealed class MainViewModel : Observable
     public OptimizeStage OptimizeStage { get => optimizeStage; private set { if (Set(ref optimizeStage, value)) { Raise(nameof(OptimizeStageText)); Raise(nameof(OptimizeIndeterminate)); Raise(nameof(OptimizeHasStatus)); } } }
     public string OptimizeStageText => OptimizeStage switch
     {
-        OptimizeStage.Downloading => "ĐANG TẢI",
         OptimizeStage.Preparing => "ĐANG CHUẨN BỊ",
         OptimizeStage.Applying => "ĐANG ÁP DỤNG",
         OptimizeStage.Completed => preview ? "ĐÃ XEM TRƯỚC" : "HOÀN TẤT",

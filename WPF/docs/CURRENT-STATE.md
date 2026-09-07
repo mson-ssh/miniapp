@@ -1,5 +1,11 @@
 # Trạng thái bàn giao
 
+## Bản tích hợp cục bộ tiếp theo — engine Win11Debloat đóng gói sẵn
+
+Chưa commit/push/phát hành. Optimize **net48** đã chuyển từ tải và giải nén ZIP GitHub lúc chạy sang source vendor của commit `6012b02ea282f23ea943946206762fd430025c6f` tại `ThirdParty/Win11Debloat`. Build net48 đóng gói cây runtime cần thiết vào `Engine/Debloat`; mỗi lượt tạo một bản sao làm việc ngắn, riêng trước khi bỏ duy nhất `CreateRestorePoint` khỏi Default và gắn task bridge. Cây vendor giữ MIT `LICENSE` và `UPSTREAM.md`; không sửa source upstream. Luồng active chỉ có Preparing → Applying, không còn Downloading hay gọi GitHub cho source upstream.
+
+Backup Registry và log bền vững vẫn dùng thư mục phiên `%LocalAppData%\MiniApps\OptimizeLogs`; nếu không chuyển được backup thì Optimize báo lỗi và service không xóa cây làm việc còn chứa backup. `Test-OptimizeBundledEngine.ps1` đạt 31 kiểm tra: provenance/license, dependency, không còn download active, profile khác Default đúng một mục, copy riêng, đường dẫn legacy, lỗi bundle thiếu, parse entrypoint sau khi bắn bridge và kiểm tra output Public. Build net48 sạch; 59 logic tests, 6 WPF checks và fixture bridge đều đạt. Preview Developer net48 đã mở từ `artifacts/developer-net48-bundled-final-20260907-092919-85a073e4`; không chạy Optimize thật. ZIP Public đo cục bộ là 857,494 bytes, tăng 360,611 bytes so với ZIP v0.3.3 (496,883 bytes); đây chỉ là số đo trước phát hành. Không build/test net10. Cần test thực trên VM Windows 10/11 trước khi phát hành.
+
 ## Phát hành v0.3.3 — 2026-09-07
 
 Đã phát hành bản sửa đường dẫn giải nén Optimize cho net48 theo yêu cầu test irm. Source release: `d13d50a02f7bd7c8cf8c30054c31cbff23cdab45`. ZIP net48: 496883 bytes, SHA-256 `feed9f0b4e956c9e992c37ddb4ed572030e059c9aafe5fef2fbd1f99e5a2ea78`. Đã xác minh digest/size cả hai ZIP trên GitHub và tải lại net48 kiểm tra hash. Bootstrap chuyển sang v0.3.3 sau xác minh asset. Net10 giữ nguyên byte của v0.3.0, không rebuild. Fixture archive, bridge và bootstrap đạt; chưa chạy Optimize thật trên máy phát triển. Đoạn “bản sửa local tiếp theo” dưới đây mô tả lịch sử trước khi phát hành v0.3.3.

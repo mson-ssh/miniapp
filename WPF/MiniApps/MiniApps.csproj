@@ -11,7 +11,7 @@
     <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>MiniApps</AssemblyName>
-    <Version>0.3.3</Version>
+    <Version>0.3.4</Version>
     <MiniAppsEdition Condition="'$(MiniAppsEdition)' == ''">Developer</MiniAppsEdition>
     <DefineConstants Condition="'$(MiniAppsEdition)' == 'Developer'">$(DefineConstants);MINIAPPS_DEVELOPER</DefineConstants>
   </PropertyGroup>
@@ -19,14 +19,20 @@
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
     <PackageReference Include="System.Text.Json" Version="8.0.6" />
     <Reference Include="System.Net.Http" />
+    <Content Include="..\ThirdParty\Win11Debloat\**\*" Link="Engine\Debloat\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Scripts\*.ps1" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Scripts\Update-Winget.ps1;Scripts\Invoke-Debloat.ps1" />
   </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <!-- Kept in source for the historical ZIP fixture only; the bundled engine flow never ships it. -->
+    <Content Remove="Scripts\Expand-OptimizeArchive.ps1" />
+  </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
     <Content Remove="Scripts\Optimize-Defaults.ps1" />
     <Content Remove="Scripts\Optimize-TaskBridge.ps1" />
     <Content Remove="Scripts\Expand-OptimizeArchive.ps1" />
+    <Content Remove="Scripts\Copy-OptimizeEngine.ps1" />
   </ItemGroup>
 </Project>
