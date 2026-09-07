@@ -2,6 +2,8 @@
 
 ## Bản sửa v0.3.2 — 2026-09-07
 
+Đã phát hành: source `3025994bf376f87e13532f0bc264e957121ecb32`, ZIP net48 494415 bytes, SHA-256 `6541d26aca87cdf292297a738a8687c9ed9f4db546ef8839499c21aa11cf1100`. Đã xác minh metadata hash/size của asset trên GitHub và tải lại net48. Bootstrap chuyển sang v0.3.2 sau khi asset có sẵn. Các mục release bên dưới là lịch sử.
+
 Theo yêu cầu người dùng: Optimize net48 bỏ SHA-256 của ZIP Win11Debloat, giữ commit HTTPS cố định và các bước chuẩn bị bắt buộc. Luồng UI/preview là Downloading → Preparing → Applying. Log tạo theo phiên trước khi tải; lỗi PowerShell gốc được lưu và hiển thị. Bootstrap vẫn kiểm tra SHA-256/kích thước gói MiniApps. Build net48 sạch, 59 logic tests và 6 kiểm tra WPF đạt, bao gồm lỗi chuẩn bị và retry; fixture bridge và cú pháp PowerShell đạt. Không chạy tối ưu thật trên máy phát triển. Net10 tiếp tục dùng nguyên artifact v0.3.0, không rebuild.
 
 ## Phát hành v0.3.1
