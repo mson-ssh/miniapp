@@ -1,5 +1,13 @@
 # Trạng thái bàn giao
 
+## Bản sửa local sau v0.3.4 — lỗi khởi động gói Public
+
+Máy khách xác nhận v0.3.4 thoát mã 2 vì WPF tìm `app\mainwindow.xaml`. Nguyên nhân là cây Win11Debloat đã được khai báo thành MSBuild `Content`; `Schemas\MainWindow.xaml` của upstream sinh `AssemblyAssociatedContentFileAttribute("mainwindow.xaml")` và che resource giao diện đã biên dịch của MiniApps. Bản sửa net48 chuyển cây vendor sang `None` có copy-to-output, nên XAML upstream vẫn có tại `Engine\Debloat\Schemas` dưới dạng dữ liệu nhưng không còn metadata WPF. Assembly Public đã kiểm tra không đăng ký external `mainwindow.xaml`, đồng thời vẫn có `MiniApps.g.resources/mainwindow.baml`.
+
+Khởi động net48 nay ghi `Exception.ToString()` cùng thông tin runtime vào `%LocalAppData%\MiniApps\StartupLogs`; hộp thoại dùng tiêu đề “MiniApps - lỗi khởi động” và hiển thị đường dẫn log. Headless vẫn không mở hộp thoại. Build net48 sạch; 60 logic tests và 6 kiểm tra WPF đạt. Fixture engine/bridge/bootstrap đạt. Gói Public đã mở và đóng sạch từ output ngắn và đường dẫn lồng kiểu phiên `irm`; không chạy Optimize/cài đặt/thiết lập Windows thật. Developer preview được mở sau kiểm tra. Net10 chưa build/test/cập nhật. Chưa commit, push hoặc phát hành bản sửa này.
+
+Cảnh báo session cũ v0.3.3 được giữ xử lý bảo thủ: bootstrap không kill tiến trình và không xóa phiên khi Windows báo thư mục còn được sử dụng. Phiên báo lỗi thực tế đã được giải phóng ở lần kiểm tra sau; không còn đủ bằng chứng về PID/handle để sửa vòng đời tiến trình một cách an toàn. Backup Registry nằm ngoài cây dọn vẫn được bảo toàn. Cần thu PID/command line hoặc handle tại thời điểm tái hiện nếu cảnh báo tiếp tục xuất hiện.
+
 ## Phát hành v0.3.4 — 2026-09-07
 
 Đã phát hành theo yêu cầu test máy khách. Source release: `0a4869f0ce846fb5cccddc048dc86b3f515267e9`. ZIP net48: 862076 bytes, SHA-256 `0164182cc2e48861be789f2a3704004a6a8580d4ea5f1e3ae7329fe9cc46165d`. Đã xác minh digest/size của hai ZIP trên GitHub, tải lại net48 kiểm tra hash, engine và MIT LICENSE; bootstrap chuyển sang v0.3.4 sau xác minh. Optimize **net48** đã chuyển từ tải và giải nén ZIP GitHub lúc chạy sang source vendor của commit `6012b02ea282f23ea943946206762fd430025c6f` tại `ThirdParty/Win11Debloat`. Build net48 đóng gói cây runtime cần thiết vào `Engine/Debloat`; mỗi lượt tạo một bản sao làm việc ngắn, riêng trước khi bỏ duy nhất `CreateRestorePoint` khỏi Default và gắn task bridge. Cây vendor giữ MIT `LICENSE` và `UPSTREAM.md`; không sửa source upstream. Luồng active chỉ có Preparing → Applying, không còn Downloading hay gọi GitHub cho source upstream.

@@ -45,6 +45,20 @@ var root = Path.Combine(Path.GetTempPath(), "MiniApps-test-" + Guid.NewGuid().To
 Directory.CreateDirectory(root);
 try
 {
+#if NET48
+    Check("Startup failures are logged durably with inner exceptions", () => {
+        var logRoot = Path.Combine(root, "startup-logs");
+        Exception failure;
+        try { throw new InvalidOperationException("inner startup detail"); }
+        catch (Exception inner) { failure = new ApplicationException("outer startup failure", inner); }
+        var path = StartupFailureLog.TryWrite(failure, logRoot);
+        Assert(path != null && File.Exists(path));
+        var contents = File.ReadAllText(path!);
+        Assert(contents.Contains("ApplicationException") && contents.Contains("outer startup failure") && contents.Contains("InvalidOperationException") && contents.Contains("inner startup detail"));
+        var userMessage = StartupFailureLog.BuildUserMessage(failure, path);
+        Assert(userMessage.Contains("MiniApps không thể khởi động") && userMessage.Contains(path!));
+    });
+#endif
     Check("All built-ins expose nonempty executable scripts", () => {
         var settings = WindowsSettingsCatalog.Defaults(); WindowsSettingsCatalog.Validate(settings);
         Assert(settings.All(s => !string.IsNullOrWhiteSpace(s.Script)));

@@ -19,6 +19,8 @@ MiniApps là WPF C#/XAML theo MVVM, dùng control chuẩn đã style. Project đ
 | `MiniApps.Tests/Program.cs` | Kiểm thử logic và WPF preview/render |
 | `bootstrap.ps1` | Chọn runtime, xác minh/tải/giải nén, UAC, chạy và dọn phiên |
 
+Lỗi khởi động net48 được ghi đầy đủ vào `%LocalAppData%\MiniApps\StartupLogs`; hộp thoại lỗi hiển thị đường dẫn log. Chế độ headless vẫn thoát bằng mã lỗi mà không mở hộp thoại.
+
 ## Edition và cấu hình
 
 MSBuild `MiniAppsEdition=Developer` định nghĩa `MINIAPPS_DEVELOPER`; Public chặn cả UI và các lệnh Setting. Public đọc `ReleaseConfig` cạnh executable và yêu cầu cấu hình hợp lệ; không dùng cấu hình LocalAppData để ghi đè catalog phát hành.
@@ -32,5 +34,7 @@ Developer dùng `--config-root` để chọn thư mục. `--developer-preview` m
 Install: chọn suite → kiểm tra quyền/khóa phiên → tải và chạy app song song cùng Windows settings → gom tiến trình → chờ tác vụ đang chạy → tổng kết/dọn. Debloat bị lọc khỏi Install theo ID hoặc Action. MSI có hàng đợi riêng; dừng hàng đợi không kill bộ cài đang chạy.
 
 Optimize net48 thật: `MainViewModel` khóa thao tác xung đột và giao việc cho `IOptimizeService` → service kiểm tra Administrator/mutex → tạo thư mục phiên ngắn, riêng → script phát trạng thái Preparing/Applying và `MINIAPPS_TASK_JSON` cho 17 tác vụ → copy source Win11Debloat đã vendor, ghim commit và đóng gói sẵn ở `Engine/Debloat`, vào `src` qua staging → bridge bọc đúng điểm gọi top-level của upstream → áp dụng Default đã bỏ restore point → giữ log/backup → xác minh mọi tác vụ có DONE/SKIP/ERROR → dọn và trả kết quả. Không có tải source/GitHub trong luồng Optimize active. UI đổi thứ tự hàng theo sự kiện thật; thiếu terminal event hoặc ERROR không được coi là thành công. Preview dùng `OptimizePreviewService`, mô phỏng tuần tự cùng protocol và không chạy PowerShell.
+
+Cây Win11Debloat được khai báo là MSBuild `None` chỉ trong target net48 rồi sao chép ra `Engine/Debloat`. Các XAML upstream là dữ liệu cho PowerShell đọc lúc chạy; chúng không được đăng ký thành WPF `Content` và không thể che resource `mainwindow.baml` đã biên dịch của MiniApps.
 
 Bootstrap: kiểm tra OS/kiến trúc và Framework → chọn net48 hoặc net10 → manifest schema 2 → xác minh URL/kích thước/hash ZIP → giải nén/chạy → chờ cây process và dọn phiên có marker. Push source không thay đổi ZIP trong Release.

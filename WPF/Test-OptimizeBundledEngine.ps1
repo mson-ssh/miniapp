@@ -33,11 +33,28 @@ $projectText = Get-Content -LiteralPath $csproj -Raw
 Assert-True ($projectText -match 'Condition="''\$\(TargetFramework\)'' == ''net48''"') 'Project has no net48-specific content group.'
 Assert-True ($projectText -match 'ThirdParty\\Win11Debloat') 'Project does not package the bundled engine.'
 Assert-True ($projectText -match 'Engine\\Debloat') 'Project does not place the bundled engine under the short runtime path.'
+Assert-True ($projectText -match '<None\s+Include="\.\.\\ThirdParty\\Win11Debloat\\\*\*\\\*"') 'Vendored engine must be a non-WPF None item.'
+Assert-True (-not ($projectText -match '<Content\s+Include="\.\.\\ThirdParty\\Win11Debloat')) 'Vendored engine is still registered as WPF Content.'
 if (-not [string]::IsNullOrWhiteSpace($PublishedPath)) {
-    $publishedEngine = Join-Path ([System.IO.Path]::GetFullPath($PublishedPath)) 'Engine\Debloat'
+    $publishedRoot = [System.IO.Path]::GetFullPath($PublishedPath)
+    $publishedEngine = Join-Path $publishedRoot 'Engine\Debloat'
     Assert-True (Test-Path -LiteralPath (Join-Path $publishedEngine 'Win11Debloat.ps1') -PathType Leaf) 'Published net48 output lacks the bundled entry point.'
     Assert-True (Test-Path -LiteralPath (Join-Path $publishedEngine 'LICENSE') -PathType Leaf) 'Published net48 output lacks the MIT license.'
     Assert-True (Test-Path -LiteralPath (Join-Path $publishedEngine 'UPSTREAM.md') -PathType Leaf) 'Published net48 output lacks provenance.'
+    Assert-True (Test-Path -LiteralPath (Join-Path $publishedEngine 'Schemas\MainWindow.xaml') -PathType Leaf) 'Published upstream XAML runtime data is missing.'
+
+    Add-Type -AssemblyName PresentationCore
+    $assembly = [Reflection.Assembly]::LoadFrom((Join-Path $publishedRoot 'MiniApps.exe'))
+    $contentFiles = @($assembly.GetCustomAttributesData() |
+        Where-Object { $_.AttributeType.FullName -eq 'System.Windows.Resources.AssemblyAssociatedContentFileAttribute' } |
+        ForEach-Object { [string]$_.ConstructorArguments[0].Value })
+    Assert-True (-not ($contentFiles -contains 'mainwindow.xaml')) 'Published assembly still registers an external mainwindow.xaml content file.'
+    $resourceStream = $assembly.GetManifestResourceStream('MiniApps.g.resources')
+    Assert-True ($null -ne $resourceStream) 'Published assembly lacks compiled WPF resources.'
+    $resourceReader = New-Object System.Resources.ResourceReader($resourceStream)
+    try { $resourceKeys = @($resourceReader.GetEnumerator() | ForEach-Object { [string]$_.Key }) }
+    finally { $resourceReader.Close(); $resourceStream.Dispose() }
+    Assert-True ($resourceKeys -contains 'mainwindow.baml') 'Published assembly lacks the compiled MiniApps MainWindow resource.'
 }
 
 . $copyHelper

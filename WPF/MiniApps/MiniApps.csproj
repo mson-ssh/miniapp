@@ -11,7 +11,7 @@
     <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>MiniApps</AssemblyName>
-    <Version>0.3.4</Version>
+    <Version>0.3.5</Version>
     <MiniAppsEdition Condition="'$(MiniAppsEdition)' == ''">Developer</MiniAppsEdition>
     <DefineConstants Condition="'$(MiniAppsEdition)' == 'Developer'">$(DefineConstants);MINIAPPS_DEVELOPER</DefineConstants>
   </PropertyGroup>
@@ -19,7 +19,12 @@
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
     <PackageReference Include="System.Text.Json" Version="8.0.6" />
     <Reference Include="System.Net.Http" />
-    <Content Include="..\ThirdParty\Win11Debloat\**\*" Link="Engine\Debloat\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Upstream XAML is runtime data for the PowerShell engine. Keeping it as None
+         prevents WPF from emitting AssemblyAssociatedContentFile attributes that can
+         shadow MiniApps' own compiled MainWindow resource. -->
+    <None Include="..\ThirdParty\Win11Debloat\**\*"
+          Link="Engine\Debloat\%(RecursiveDir)%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Scripts\*.ps1" CopyToOutputDirectory="PreserveNewest" />

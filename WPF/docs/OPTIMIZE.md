@@ -4,6 +4,8 @@ Nguồn: [Raphire/Win11Debloat](https://github.com/Raphire/Win11Debloat/tree/601
 
 Script MiniApps: `MiniApps/Scripts/Optimize-Defaults.ps1`, chỉ đóng gói cho net48. Source Win11Debloat đã ghim được vendor trong `ThirdParty/Win11Debloat` và đóng gói ra `Engine/Debloat`; Optimize không tải ZIP/source từ GitHub khi chạy. Mỗi lượt sao chép engine sang thư mục phiên ngắn, riêng rồi mới sửa profile/bắn bridge, không sửa cây engine đã đóng gói. Xác minh kích thước/SHA-256 của gói phát hành MiniApps trong bootstrap vẫn được giữ nguyên.
 
+Project khai báo toàn bộ cây vendor là MSBuild `None` và sao chép nguyên dạng. Đặc biệt, `Schemas/*.xaml` là dữ liệu runtime của upstream, không phải WPF `Content` của MiniApps. Fixture gói Public kiểm tra assembly không đăng ký `mainwindow.xaml` bên ngoài và vẫn chứa resource `mainwindow.baml` của giao diện MiniApps.
+
 Để tương thích giới hạn đường dẫn của PowerShell 5.1/.NET Framework, service tạo thư mục phiên ngắn `o-<12 ký tự>` và helper `Copy-OptimizeEngine.ps1` sao chép engine đã vendor vào `src` qua staging cùng phiên rồi mới đổi tên. Helper chặn reparse point/thoát root và đường dẫn vượt giới hạn trước khi ghi; lỗi cleanup không che lỗi chuẩn bị. `Expand-OptimizeArchive.ps1` còn nằm trong source như fixture lịch sử, nhưng không được đóng gói hay nằm trong luồng Optimize active.
 
 Script đọc `Config/DefaultSettings.json` schema 1.0 rồi loại mục `CreateRestorePoint`. Sau đó chạy upstream với `-RunDefaults -Silent -SkipExplorerRestart -LogPath ...`. Dùng danh sách Apps Default của cùng commit, không dùng Default Lite và không bổ sung danh sách gỡ riêng.

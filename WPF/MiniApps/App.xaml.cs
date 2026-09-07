@@ -51,7 +51,13 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
+#if NET48
+            var startupLog = StartupFailureLog.TryWrite(ex);
+            if (!headless)
+                MessageBox.Show(StartupFailureLog.BuildUserMessage(ex, startupLog), "MiniApps - lỗi khởi động", MessageBoxButton.OK, MessageBoxImage.Error);
+#else
             if (!headless) MessageBox.Show(ex.Message, "MiniApps - cấu hình không hợp lệ", MessageBoxButton.OK, MessageBoxImage.Error);
+#endif
             Shutdown(2);
         }
     }
