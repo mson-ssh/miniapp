@@ -1,8 +1,8 @@
 # Trạng thái bàn giao
 
-## Chuẩn bị v0.3.3 — 2026-09-07
+## Phát hành v0.3.3 — 2026-09-07
 
-Đóng gói bản sửa đường dẫn giải nén Optimize cho net48 theo yêu cầu phát hành để test irm. Net10 giữ nguyên byte của v0.3.0. Các kết quả fixture bên dưới không thay thế kiểm thử Optimize thật trên máy người dùng; trạng thái phát hành được cập nhật sau khi xác minh asset GitHub.
+Đã phát hành bản sửa đường dẫn giải nén Optimize cho net48 theo yêu cầu test irm. Source release: `d13d50a02f7bd7c8cf8c30054c31cbff23cdab45`. ZIP net48: 496883 bytes, SHA-256 `feed9f0b4e956c9e992c37ddb4ed572030e059c9aafe5fef2fbd1f99e5a2ea78`. Đã xác minh digest/size cả hai ZIP trên GitHub và tải lại net48 kiểm tra hash. Bootstrap chuyển sang v0.3.3 sau xác minh asset. Net10 giữ nguyên byte của v0.3.0, không rebuild. Fixture archive, bridge và bootstrap đạt; chưa chạy Optimize thật trên máy phát triển. Đoạn “bản sửa local tiếp theo” dưới đây mô tả lịch sử trước khi phát hành v0.3.3.
 
 ## Bản sửa v0.3.2 — 2026-09-07
 
