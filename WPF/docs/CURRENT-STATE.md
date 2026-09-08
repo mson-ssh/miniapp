@@ -1,12 +1,12 @@
 # Trạng thái bàn giao
 
-## Optimize engine một EXE — local net48
+## Phát hành v0.3.7 — Optimize engine một EXE
 
 Developer net48 nay đóng gói toàn bộ fork Win11Debloat và tám script điều phối vào resource ZIP của `MiniApps.OptimizeEngine.exe`. Service gọi helper bằng `--run --silent`; helper xác minh payload trước khi giải nén, chuyển tiếp protocol stdout/stderr và trả nguyên mã thoát cho UI. Output Developer không còn cây `Engine/Debloat` hoặc script Optimize rời. Output Public loại hoàn toàn helper và payload Optimize, phù hợp giao diện chỉ có Install Software và Driver.
 
 Kiểm tra hiện tại: helper 392192 bytes, payload 352 tệp; `--verify`, `--version`, kiểm tra payload xác định và fixture EXE độc lập đều đạt. Build net48 sạch 0 warning/0 error; 71 logic tests, 6 WPF checks, 77 kiểm tra bundle và các fixture parallel/task bridge/Appx worker/WinGet worker/timeout đều đạt. Build sạch net10 đạt; 53 logic tests và 5 WPF checks đạt để xác nhận source dùng chung không bị ảnh hưởng. Output kiểm tra Developer có 14 file; Public có 15 file và ZIP thử 502198 bytes, giảm từ 368 file của gói v0.3.6 xuống cấu trúc gọn. Public validate config và startup smoke đều thoát mã 0. Bản Developer net48 thật đã được mở từ output riêng để người dùng kiểm thử. Không fixture nào chạy Optimize hoặc thay đổi Windows thật.
 
-Đang chuẩn bị phát hành `v0.3.7` theo yêu cầu người dùng. Bootstrap vẫn trỏ `v0.3.6` cho tới khi asset mới tồn tại và được tải lại để xác minh.
+Đã phát hành source engine tại commit `5548dd2a0a32d72db61985067700338944e8fb8f`. ZIP net48 có 501811 bytes, SHA-256 `c1c7bfe1c2aa1f6e89065d70e45543bf85eb0a20b105bb23c9966de7bfebc69a`. Gói net10 của v0.3.6 được tái sử dụng nguyên byte: 63080335 bytes, SHA-256 `e1cbb8c392061b92d19fa0a9118e8351a298d4b11a9d4233bd4058723801f515`. Release công khai đủ hai ZIP, hai checksum và manifest; cả hai ZIP đã được tải lại từ GitHub và khớp manifest. Bootstrap được chuyển sang `v0.3.7` sau bước xác minh. Không chạy Optimize hoặc thay đổi Windows thật trong quá trình phát hành.
 
 ## Phát hành v0.3.6 — 2026-09-08
 
