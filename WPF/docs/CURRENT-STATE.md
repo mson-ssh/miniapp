@@ -2,7 +2,7 @@
 
 ## Phạm vi giao diện Public — local net48 và net10
 
-Public nay chỉ hiển thị hai thẻ **Install Software** và **Driver**. Điều hướng lẫn lệnh của Optimize Windows và Setting đều bị chặn trong ViewModel, kể cả khi cố gán trang trực tiếp; Developer vẫn có đủ bốn thẻ. Build sạch 0 warning/0 error trên cả hai target; net48 đạt 71 logic tests và 6 WPF checks, net10 đạt 53 logic tests và 5 WPF checks. Hai output Public trong `artifacts/public-nav-review-20260908-094220` đều xác thực cấu hình với mã 0; Public net48 smoke test mở/đóng mã 0 và preview thật đã được mở để người dùng kiểm tra. Developer net48 cũng đã được build/mở bằng `Run-Developer.ps1`. Không chạy cài đặt, Optimize hoặc Windows Setting thật; chưa commit/push/phát hành.
+Public nay chỉ hiển thị hai thẻ **Install Software** và **Driver**. Điều hướng lẫn lệnh của Optimize Windows và Setting đều bị chặn trong ViewModel, kể cả khi cố gán trang trực tiếp; Developer vẫn có đủ bốn thẻ. Build sạch 0 warning/0 error trên cả hai target; net48 đạt 71 logic tests và 6 WPF checks, net10 đạt 53 logic tests và 5 WPF checks. Hai output Public trong `artifacts/public-nav-review-20260908-094220` đều xác thực cấu hình với mã 0; Public net48 smoke test mở/đóng mã 0 và preview thật đã được mở để người dùng kiểm tra. Developer net48 cũng đã được build/mở bằng `Run-Developer.ps1`. Không chạy cài đặt, Optimize hoặc Windows Setting thật. Source đã commit/push lên nhánh `main`; chưa tạo Release hoặc upload artifact.
 
 ## Smart Skip Install Software — local net48
 
