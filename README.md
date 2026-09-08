@@ -12,7 +12,7 @@ irm https://raw.githubusercontent.com/mson-ssh/miniapp/main/WPF/bootstrap.ps1 | 
 
 `irm` là bí danh của `Invoke-RestMethod`. Bootstrap tự yêu cầu quyền Administrator, chọn runtime phù hợp, xác minh manifest/kích thước/SHA-256 của gói rồi mới chạy.
 
-Lệnh trên hiện tải Release đã xác minh `v0.3.5`. Source mới trên nhánh `main` không tự xuất hiện trong lệnh cài cho đến khi một Release mới được tạo, kiểm tra đủ asset và cập nhật bootstrap.
+Lệnh trên hiện tải Release đã xác minh `v0.3.6`. Bootstrap chỉ được chuyển sang phiên bản mới sau khi đủ hai ZIP, hai checksum và manifest trên GitHub Release đã được tải lại để kiểm tra.
 
 ## Chức năng
 

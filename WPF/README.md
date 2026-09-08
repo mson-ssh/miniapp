@@ -10,7 +10,7 @@ irm https://raw.githubusercontent.com/mson-ssh/miniapp/main/WPF/bootstrap.ps1 | 
 
 `irm` là bí danh của `Invoke-RestMethod`. Bootstrap tự yêu cầu UAC, chọn gói net48 khi máy có .NET Framework 4.8 hoặc dùng gói net10 self-contained dự phòng, xác minh manifest/kích thước/SHA-256 rồi mới chạy.
 
-Lệnh trên hiện tải Release đã xác minh `v0.3.5`. Các thay đổi mới hơn trên nhánh `main` chỉ có trong source cho đến khi một Release mới được tạo và `bootstrap.ps1` được cập nhật sau khi kiểm tra đủ asset.
+Lệnh trên hiện tải Release đã xác minh `v0.3.6`. Bootstrap chỉ được chuyển sang phiên bản mới sau khi đủ hai ZIP, hai checksum và manifest trên GitHub Release đã được tải lại để kiểm tra.
 
 ## Giao diện và edition
 

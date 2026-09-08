@@ -1,5 +1,9 @@
 # Trạng thái bàn giao
 
+## Phát hành v0.3.6 — 2026-09-08
+
+Đã phát hành source tại commit `f617fb0c1a91722faffc0c9b9e3709d754ac5797` cùng hai gói Public mới. ZIP net48 có 878546 bytes, SHA-256 `fb94ae0ea2d63d2b0a7a0eec21e4130f80ddfb2cf1d02dd2e8c74613fb527fba`; ZIP net10 self-contained có 63080335 bytes, SHA-256 `e1cbb8c392061b92d19fa0a9118e8351a298d4b11a9d4233bd4058723801f515`. Release công khai đủ hai ZIP, hai checksum và `manifest-win-x64.json`; cả hai ZIP đã được tải lại từ GitHub và khớp hash/kích thước. Bootstrap được chuyển sang `v0.3.6` sau bước xác minh. Lệnh `irm` nay nhận giao diện Public chỉ có Install Software và Driver. Không chạy Install, Optimize hoặc Windows Setting thật trong quá trình phát hành.
+
 ## Phạm vi giao diện Public — local net48 và net10
 
 Public nay chỉ hiển thị hai thẻ **Install Software** và **Driver**. Điều hướng lẫn lệnh của Optimize Windows và Setting đều bị chặn trong ViewModel, kể cả khi cố gán trang trực tiếp; Developer vẫn có đủ bốn thẻ. Build sạch 0 warning/0 error trên cả hai target; net48 đạt 71 logic tests và 6 WPF checks, net10 đạt 53 logic tests và 5 WPF checks. Hai output Public trong `artifacts/public-nav-review-20260908-094220` đều xác thực cấu hình với mã 0; Public net48 smoke test mở/đóng mã 0 và preview thật đã được mở để người dùng kiểm tra. Developer net48 cũng đã được build/mở bằng `Run-Developer.ps1`. Không chạy cài đặt, Optimize hoặc Windows Setting thật. Source đã commit/push lên nhánh `main`; chưa tạo Release hoặc upload artifact.
