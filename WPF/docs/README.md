@@ -9,8 +9,6 @@
 | [CURRENT-STATE.md](CURRENT-STATE.md) | Trạng thái bàn giao, giới hạn và việc còn lại |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Sơ đồ source, cấu hình và luồng thực thi |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Chuyển máy, build/test/preview và GitHub |
-| [OPTIMIZE.md](OPTIMIZE.md) | Profile Win11Debloat, ngoại lệ restore point và kiểm thử |
-| [DEBLOAT-REWRITE.md](DEBLOAT-REWRITE.md) | Hợp đồng engine MiniApps Debloat và xử lý tác vụ chờ kéo dài |
 
 Các kế hoạch `IMPLEMENTATION-PLAN.md`, `NET48-MIGRATION-PLAN.md`, `DUAL-RUNTIME-FALLBACK.md` ở thư mục WPF là tài liệu lịch sử; đối chiếu code và trạng thái hiện tại trước khi áp dụng. README/ARCHITECTURE/workflow ở ngoài WPF chủ yếu mô tả CLI cũ.
 

@@ -22,13 +22,6 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Scripts\Configure-Windows.ps1;Scripts\Update-Winget.ps1" CopyToOutputDirectory="PreserveNewest" />
-    <EmbeddedResource Include="Scripts\Update-Winget.ps1;Scripts\Invoke-Debloat.ps1" />
-  </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' == 'net48' and '$(MiniAppsEdition)' == 'Developer'">
-    <ProjectReference Include="..\MiniApps.OptimizeEngine\MiniApps.OptimizeEngine.csproj" ReferenceOutputAssembly="false" />
-    <None Include="..\MiniApps.OptimizeEngine\bin\$(Configuration)\net48\MiniApps.OptimizeEngine.exe"
-          Link="MiniApps.OptimizeEngine.exe"
-          CopyToOutputDirectory="PreserveNewest"
-          CopyToPublishDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Scripts\Update-Winget.ps1" />
   </ItemGroup>
 </Project>

@@ -122,7 +122,7 @@ try
         var settings = WindowsSettingsCatalog.Defaults(); WindowsSettingsCatalog.Validate(settings);
         Assert(settings.All(s => !string.IsNullOrWhiteSpace(s.Script)));
         Assert(settings.Single(s => s.Id == "Winget").Script.Contains("https://"));
-        Assert(settings.Single(s => s.Id == "Debloat").Script.Contains("RunDefaults"));
+        Assert(settings.All(s => s.Id != "Debloat" && s.Action != "Debloat"));
         settings[0].Script = ""; Reject(() => WindowsSettingsCatalog.Validate(settings));
     });
     Check("Legacy built-ins migrate without overwriting files or edited commands", () => {
@@ -151,7 +151,7 @@ try
     });
     Check("Public edition exposes only Install Software and Driver", () => {
         var vm = new MainViewModel(true, developerEdition: false);
-        Assert(!vm.IsDeveloperEdition && !vm.CanAccessOptimize && vm.IsInstall && !vm.IsOptimize && !vm.IsSetting && vm.Page == 0);
+        Assert(!vm.IsDeveloperEdition && !vm.CanAccessOptimize && !vm.ShowOptimizeTab && vm.IsInstall && !vm.IsOptimize && !vm.IsSetting && vm.Page == 0);
         Assert(!vm.OptimizeCommand.CanExecute(null) && !vm.OpenOptimizeLogCommand.CanExecute(null));
         vm.Page = 1;
         Assert(vm.Page == 0 && vm.IsInstall && !vm.IsOptimize);
@@ -177,7 +177,7 @@ try
         settings.RemoveAt(0); settings[0].Name = "Múi giờ tùy chỉnh";
         settings.Add(new() { Name = "Test script", Description = "Harmless test", Script = "Write-Output 'test'" });
         store.SaveWindows(settings); var loaded = store.LoadWindows();
-        Assert(loaded.Count == 9 && loaded[0].Name == "Múi giờ tùy chỉnh" && loaded[loaded.Count - 1].Script == "Write-Output 'test'" && store.Load().Count == 13);
+        Assert(loaded.Count == 8 && loaded[0].Name == "Múi giờ tùy chỉnh" && loaded[loaded.Count - 1].Script == "Write-Output 'test'" && store.Load().Count == 13);
         loaded[loaded.Count - 1].Script = ""; Reject(() => store.SaveWindows(loaded)); Assert(store.LoadWindows()[store.LoadWindows().Count - 1].Script.Length > 0);
         store.SaveWindows([]); Assert(store.LoadWindows().Count == 0);
     });
@@ -282,7 +282,7 @@ try
         WaitWithTimeout(operation, TimeSpan.FromSeconds(2)).GetAwaiter().GetResult();
         Assert(clock.Elapsed < TimeSpan.FromSeconds(2) && outcomes.Last().Status == "Đã hủy" && outcomes.Last().Finished && !outcomes.Last().Failed);
     });
-    Check("Install includes Windows settings except Debloat without selection state", () => { var vm = new MainViewModel(true); Assert(vm.Apps.Count == 11 && vm.WindowsOptions.Count == 8 && vm.WindowsOptions.All(o => !MainViewModel.IsDebloat(o.Definition)) && typeof(WindowsOption).GetProperty("Selected") == null && vm.SelectionText.Contains("8 thiết lập")); });
+    Check("Install includes all remaining Windows settings without selection state", () => { var vm = new MainViewModel(true); Assert(vm.Apps.Count == 11 && vm.WindowsOptions.Count == 8 && vm.WindowsOptions.All(o => !MainViewModel.IsDebloat(o.Definition)) && typeof(WindowsOption).GetProperty("Selected") == null && vm.SelectionText.Contains("8 thiết lập")); });
     Check("Info.exe setting downloads a validated executable to Desktop", () => {
         var info = WindowsSettingsCatalog.Defaults().Single(s => s.Id == "InfoExe");
         Assert(info.Name == "Info.exe" && info.Script.Contains("/info.exe") && info.Script.Contains("GetFolderPath('Desktop')"));
@@ -307,12 +307,13 @@ try
         Assert(new AppRow(new AppDefinition { Id = "windows:summary" }).IsWindowsSummary);
         Assert(!new AppRow(new AppDefinition { Id = "chrome" }).IsWindowsSummary);
     });
-    Check("Debloat remains editable but is excluded from Install", () => {
-        var vm = new MainViewModel(true, () => OfficeChoice.Cancel);
-        Assert(vm.EditableWindows.Any(s => s.Id == "Debloat") && vm.WindowsOptions.All(o => o.Id != "Debloat"));
-        Assert(MainViewModel.IsDebloat(new WindowsSettingDefinition { Id = "legacy-debloat", Action = "Debloat" }));
-        Assert(MainViewModel.IsDebloat(new WindowsSettingDefinition { Id = "Debloat", Action = "Custom" }));
-        vm.InstallCommand.Execute(null); Assert(!vm.HasStarted && vm.SystemTasks.Count == 0);
+    Check("Schema 2 Debloat settings are removed during migration", () => {
+        var dir = Path.Combine(root, "debloat-migration"); Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, "windows.json");
+        var json = """{"SchemaVersion":2,"Items":[{"Id":"Debloat","Name":"Debloatware","Action":"Debloat","Script":"legacy"},{"Id":"Timezone","Name":"Timezone","Action":"Timezone","Script":"Set-TimeZone -Id 'SE Asia Standard Time'"}],"RemovedDefaultIds":[]}""";
+        File.WriteAllText(path, json);
+        var loaded = new SettingsStore(dir).LoadWindows();
+        Assert(loaded.Count == 1 && loaded[0].Id == "Timezone" && File.ReadAllText(path) == json);
     });
 #if NET48
     Check("Optimize protocol exposes bundled-engine prepare and apply stages", () => {
@@ -566,9 +567,9 @@ try
     });
     Check("System tasks route through runner and preserve failure results", () => {
         var commands = new System.Collections.Concurrent.ConcurrentBag<string>(); var outcomes = new System.Collections.Concurrent.ConcurrentBag<DeploymentEvent>();
-        var service = new DeploymentService(run: (command, _, _) => { commands.Add(command); return Task.FromResult(command.Contains("Debloat") ? 1 : 0); });
-        service.RunAsync([], WindowsSettingsCatalog.Defaults().Where(s => s.Action is "Winget" or "Debloat").ToArray(), Path.Combine(root, "system"), new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(_ => { }), default).GetAwaiter().GetResult();
-        Assert(commands.Count == 2 && commands.Any(c => c.Contains("setting-Winget.ps1")) && outcomes.Any(e => e.Id == "windows:Winget" && e.Finished && !e.Failed) && outcomes.Any(e => e.Id == "windows:Debloat" && e.Failed));
+        var service = new DeploymentService(run: (command, _, _) => { commands.Add(command); return Task.FromResult(0); });
+        service.RunAsync([], WindowsSettingsCatalog.Defaults().Where(s => s.Action == "Winget").ToArray(), Path.Combine(root, "system"), new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(_ => { }), default).GetAwaiter().GetResult();
+        Assert(commands.Count == 1 && commands.Any(c => c.Contains("setting-Winget.ps1")) && outcomes.Any(e => e.Id == "windows:Winget" && e.Finished && !e.Failed));
     });
     Check("All ready EXE installers and Windows settings start together", () =>
     {
@@ -750,6 +751,11 @@ var renderThread = new Thread(() =>
         var vm = new MainViewModel(true, () => { askCount++; return nextChoice; }, readDeviceInfo: () => Task.FromResult(DeviceInfoService.Resolve("MINI-PC", "Dell Inc.", "Latitude 5450", "ABC1234")));
         var window = new MiniApps.MainWindow(vm) { ShowInTaskbar = false, Left = -20000, Top = -20000 };
         window.Show();
+        var developerNavigation = (System.Windows.Controls.ListBox)window.FindName("NavigationList");
+        if (developerNavigation.Items.Count != 4 ||
+            ((System.Windows.Controls.ListBoxItem)developerNavigation.Items[1]).Visibility != System.Windows.Visibility.Collapsed)
+            throw new Exception("Developer navigation exposed Optimize Windows.");
+        Console.WriteLine("PASS Optimize navigation is hidden in Developer");
         var targetDir = Path.GetFullPath(Path.Combine("WPF", "artifacts", "qa"));
         Directory.CreateDirectory(targetDir);
         foreach (var (button, expected) in new[] { ("OfficeButton", OfficeChoice.Office), ("WpsButton", OfficeChoice.Wps), ("CancelButton", OfficeChoice.Cancel), ("", OfficeChoice.Cancel) })

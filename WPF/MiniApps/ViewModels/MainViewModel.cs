@@ -86,6 +86,7 @@ public sealed class MainViewModel : Observable
     public ICollectionView FilteredWindows { get; }
     public bool IsDeveloperEdition { get; }
     public bool CanAccessOptimize => IsDeveloperEdition;
+    public bool ShowOptimizeTab => false;
     private int settingsTab;
     public int SettingsTab { get => settingsTab; set { if (Set(ref settingsTab, value)) RefreshSettingsState(); } }
     public string Machine => $"{Environment.MachineName}  ·  Windows {WindowsCompatibility.CurrentBuild}  ·  {System.Runtime.InteropServices.RuntimeInformation.OSArchitecture}";

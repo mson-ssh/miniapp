@@ -23,7 +23,7 @@
             </ControlTemplate></Setter.Value></Setter>
           </Style></ListBox.Resources>
           <ListBoxItem Content="Install Software" />
-          <ListBoxItem Content="Optimize Windows" Visibility="{Binding CanAccessOptimize, Converter={StaticResource BoolVisibility}}" />
+          <ListBoxItem Content="Optimize Windows" Visibility="{Binding ShowOptimizeTab, Converter={StaticResource BoolVisibility}}" />
           <ListBoxItem Content="Driver" />
           <ListBoxItem Content="Setting" Visibility="{Binding IsDeveloperEdition, Converter={StaticResource BoolVisibility}}" IsEnabled="{Binding DataContext.IsIdle, RelativeSource={RelativeSource AncestorType=ListBox}}" />
         </ListBox>
@@ -308,7 +308,6 @@
                 <Grid Grid.Column="1" Visibility="{Binding HasSelectedWindows, Converter={StaticResource BoolVisibility}}" Margin="24,20,20,18" DataContext="{Binding SelectedWindows}">
                   <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                   <Grid Margin="0,0,0,14"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Chi tiết thiết lập" FontSize="18" FontWeight="SemiBold" /><TextBlock Text="Lưu cấu hình không chạy câu lệnh." Style="{StaticResource Caption}" Margin="0,5,0,0" /></StackPanel><Button Grid.Column="1" Content="Xóa" Command="{Binding DataContext.DeleteWindowsCommand, RelativeSource={RelativeSource AncestorType=Window}}" Padding="12,6" VerticalAlignment="Top" AutomationProperties.Name="Xóa thiết lập Windows" /></Grid>
-                  <Border Grid.Row="1" Background="#FFF6E8" BorderBrush="#E8D3AE" BorderThickness="1" CornerRadius="4" Padding="10,8" Margin="0,0,0,12" Visibility="{Binding DataContext.IsSelectedDebloat, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolVisibility}}"><TextBlock Text="Debloatware đã được tách khỏi Install Software và được thực thi từ thẻ Optimize Windows." Foreground="#765327" TextWrapping="Wrap" /></Border>
                   <StackPanel Grid.Row="2"><TextBlock Text="Tên thiết lập" Margin="0,0,0,6" /><TextBox x:Name="WindowsNameEditor" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Tên thiết lập" /></StackPanel>
                   <StackPanel Grid.Row="3" Margin="0,12,0,0"><TextBlock Text="Mô tả tác động" Margin="0,0,0,6" /><TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AutomationProperties.Name="Mô tả thiết lập" /></StackPanel>
                   <TextBlock Grid.Row="4" Text="Câu lệnh PowerShell" Margin="0,12,0,6" />

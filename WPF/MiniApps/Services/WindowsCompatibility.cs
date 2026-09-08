@@ -16,7 +16,7 @@ public static class WindowsCompatibility
         // The remaining built-ins use Windows PowerShell, registry, powercfg, networking
         // and download APIs already available at the MiniApps Windows baseline.
         "Desktop" or "Timezone" or "Dns" or "FastStartup" or "Power" or
-        "PasswordExpiry" or "InfoExe" or "Debloat" => 17763,
+        "PasswordExpiry" or "InfoExe" => 17763,
         // User scripts have no machine-readable compatibility metadata yet.
         _ => MinimumWindowsBuild
     };

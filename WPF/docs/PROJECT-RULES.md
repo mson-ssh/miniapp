@@ -20,7 +20,7 @@ MiniApps phải yêu cầu quyền Administrator ngay khi khởi động ở c�
 - Lượt cài hoàn tất thì nút xám, bị khóa trong phiên. Lượt hủy hoặc lỗi cấp phiên cho thử lại; lỗi từng app được báo trong kết quả.
 - Nhận diện ứng dụng đã cài là tính năng tự động. Setting có hai nhóm ứng dụng/thiết lập, hỗ trợ thêm/sửa/xóa; không có mục Nâng cao.
 - Driver đọc Host, hãng, model, serial có thể copy và mở URL hãng. Chưa tự tải/cài driver.
-- Optimize tách khỏi Install Software; dùng Default Win11Debloat, chỉ bỏ restore point. Giao diện chia `Debloatware` và `Optimize Windows`; một lần bấm chạy đồng thời hai nhóm trong cùng lượt. Các thay đổi Appx vẫn tuần tự qua mutex. Xem [OPTIMIZE.md](OPTIMIZE.md).
+- Debloat/Optimize không còn là tính năng đóng gói của Developer hoặc Public.
 
 ## Ranh giới thực thi
 

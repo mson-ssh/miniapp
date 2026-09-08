@@ -15,7 +15,7 @@ Lệnh trên hiện tải Release đã xác minh `v0.3.7`. Bootstrap chỉ đư�
 ## Giao diện và edition
 
 - **Public:** chỉ hiển thị **Install Software** và **Driver**.
-- **Developer:** hiển thị đủ **Install Software**, **Optimize Windows**, **Driver** và **Setting**.
+- **Developer:** hiển thị **Install Software**, **Driver** và **Setting**.
 - Cả hai edition đều dùng manifest `requireAdministrator`.
 - Public đọc cấu hình đóng gói trong `ReleaseConfig`; Developer có thể chỉnh cấu hình thật trong workspace.
 
@@ -30,14 +30,6 @@ Trên net48, Smart Skip đọc inventory phần mềm theo ba trạng thái `Ins
 ### Driver
 
 Hiển thị host, hãng, model và serial; cho phép sao chép serial và mở trang hỗ trợ chính thức của nhà sản xuất. MiniApps chưa tự tải hoặc cài driver.
-
-### Optimize Windows
-
-Chỉ hiển thị trong Developer. Luồng net48 gọi một `MiniApps.OptimizeEngine.exe` chạy silent; EXE này chứa sẵn fork Win11Debloat và các script điều phối nên gói Developer không còn 352 file engine rời. Khi người dùng bấm Optimize, helper xác minh payload rồi giải nén vào thư mục phiên tạm để chạy. Public không đóng gói helper hoặc payload Optimize.
-
-Giao diện chia thành **Debloatware** và **Optimize Windows** nhưng chạy chung một lượt. Hai lane có thể chạy đồng thời; các thao tác Appx/WinGet dùng worker và mutex riêng để tránh nhiều writer trên App Repository.
-
-Mỗi lượt lưu log, diagnostics và Registry backup trong `%LocalAppData%\MiniApps\OptimizeLogs`. Tác vụ quá hạn được báo đúng trạng thái; MiniApps không kill worker hệ thống còn hoạt động.
 
 ### Setting
 
@@ -57,7 +49,7 @@ dotnet build ./MiniApps.Tests/MiniApps.Tests.csproj -c Release -f net10.0-window
 ./Run-Developer.ps1 -Target net48
 ```
 
-`Run-Developer.ps1` mở bản Developer net48 với cấu hình thật trong `ReleaseConfig`. `Preview.ps1` dành cho mô phỏng. Không bấm Install hoặc Optimize trên máy phát triển nếu không chủ động muốn áp dụng thay đổi thật.
+`Run-Developer.ps1` mở bản Developer net48 với cấu hình thật trong `ReleaseConfig`. `Preview.ps1` dành cho mô phỏng. Không bấm Install trên máy phát triển nếu không chủ động muốn áp dụng thay đổi thật.
 
 ## Phát hành
 
@@ -67,4 +59,4 @@ dotnet build ./MiniApps.Tests/MiniApps.Tests.csproj -c Release -f net10.0-window
 ./Publish.ps1 -Target net48 -Runtime win-x64 -Version <version>
 ```
 
-Chỉ phát lệnh `irm` cho người dùng sau khi các asset của Release tồn tại và đã được xác minh. Xem [DEVELOPMENT.md](docs/DEVELOPMENT.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md), [OPTIMIZE.md](docs/OPTIMIZE.md) và [CURRENT-STATE.md](docs/CURRENT-STATE.md) để biết chi tiết.
+Chỉ phát lệnh `irm` cho người dùng sau khi các asset của Release tồn tại và đã được xác minh. Xem [DEVELOPMENT.md](docs/DEVELOPMENT.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md) và [CURRENT-STATE.md](docs/CURRENT-STATE.md) để biết chi tiết.

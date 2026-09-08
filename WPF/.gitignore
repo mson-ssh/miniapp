@@ -2,4 +2,15 @@
 **/obj/
 artifacts/
 *.user
-MiniApps.OptimizeEngine/MiniApps.OptimizePayload.zip
+MiniApps.OptimizeEngine/
+ThirdParty/Win11Debloat/
+MiniApps/Scripts/Optimize-*.ps1
+MiniApps/Scripts/Invoke-MiniAppsAppxWorker.ps1
+MiniApps/Scripts/Invoke-MiniAppsWingetWorker.ps1
+MiniApps/Scripts/Copy-OptimizeEngine.ps1
+MiniApps/Scripts/Configure-OptimizeEngine.ps1
+MiniApps/Scripts/Expand-OptimizeArchive.ps1
+MiniApps/Scripts/Invoke-Debloat.ps1
+Test-Optimize*.ps1
+docs/OPTIMIZE.md
+docs/DEBLOAT-REWRITE.md

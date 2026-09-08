@@ -5,7 +5,7 @@ namespace MiniApps.Services;
 public sealed class SettingsStore(string? directory = null)
 {
     private const int AppsSchemaVersion = 1;
-    private const int WindowsSchemaVersion = 2;
+    private const int WindowsSchemaVersion = 3;
     public string DirectoryPath { get; } = directory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MiniApps");
     public List<AppDefinition> Load(bool required = false)
     {
@@ -31,6 +31,10 @@ public sealed class SettingsStore(string? directory = null)
         if (!File.Exists(path)) return WindowsSettingsCatalog.Defaults();
         var saved = Read<WindowsSettingDefinition>(path, WindowsSchemaVersion, legacyVersion: 1);
         var settings = saved.Items;
+        if (saved.SchemaVersion < 3)
+            settings.RemoveAll(setting => setting != null &&
+                (setting.Id.Equals("Debloat", StringComparison.OrdinalIgnoreCase) ||
+                 setting.Action.Equals("Debloat", StringComparison.OrdinalIgnoreCase)));
         // Old configs stored only an Action for built-ins. Materialize their commands once on load.
         foreach (var setting in settings.Where(s => s != null && s.Action != "Custom" && string.IsNullOrEmpty(s.Script)))
             setting.Script = WindowsSettingsCatalog.DefaultScript(setting.Action);

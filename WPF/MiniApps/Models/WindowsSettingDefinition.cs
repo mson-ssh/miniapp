@@ -27,8 +27,8 @@ public static class WindowsSettingsCatalog
         new("Desktop", "Hiện biểu tượng Desktop"), new("Timezone", "Múi giờ Việt Nam"),
         new("Dns", "DNS Cloudflare / Google"), new("FastStartup", "Tắt Fast Startup"),
         new("Power", "Không tắt màn hình / sleep"), new("PasswordExpiry", "Mật khẩu không hết hạn"),
-        new("Winget", "Winget (update)"), new("Debloat", "Debloatware"),
-        new("InfoExe", "Info.exe"), new("Custom", "PowerShell tùy chỉnh")
+        new("Winget", "Winget (update)"), new("InfoExe", "Info.exe"),
+        new("Custom", "PowerShell tùy chỉnh")
     ];
     public static List<WindowsSettingDefinition> Defaults() =>
     [
@@ -39,7 +39,6 @@ public static class WindowsSettingsCatalog
         Make("Power", "Không tự tắt màn hình / sleep", "Áp dụng khi dùng nguồn điện và pin; tăng tiêu thụ pin."),
         Make("PasswordExpiry", "Mật khẩu không hết hạn", "Thay đổi chính sách hết hạn mật khẩu cục bộ."),
         Make("Winget", "Winget (update)", "Cập nhật WinGet / App Installer và dependency Microsoft; không upgrade toàn bộ ứng dụng."),
-        Make("Debloat", "Debloatware", "Gỡ app cài sẵn và áp dụng mặc định Win11Debloat; có thể cần đăng xuất."),
         Make("InfoExe", "Info.exe", "Tải info.exe về Desktop; không tự động mở ứng dụng.")
     ];
     private static WindowsSettingDefinition Make(string action, string name, string description) => new()
@@ -72,7 +71,6 @@ public static class WindowsSettingsCatalog
             """,
         "PasswordExpiry" => "net accounts /maxpwage:unlimited; if ($LASTEXITCODE -ne 0) { throw \"net accounts failed ($LASTEXITCODE)\" }",
         "Winget" => ReadScriptResource("Update-Winget.ps1"),
-        "Debloat" => ReadScriptResource("Invoke-Debloat.ps1"),
         "InfoExe" => """
             $ErrorActionPreference = 'Stop'
             $url = 'https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/info.exe'

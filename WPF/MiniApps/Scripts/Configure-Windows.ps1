@@ -3,7 +3,6 @@ $ErrorActionPreference = 'Stop'
 try {
     switch ($Option) {
         'Winget' { & (Join-Path $PSScriptRoot 'Update-Winget.ps1'); if (-not $?) { throw 'WinGet update failed.' } }
-        'Debloat' { & (Join-Path $PSScriptRoot 'Invoke-Debloat.ps1'); if (-not $?) { throw 'Debloat failed.' } }
         'Desktop' {
             $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel'
             New-Item -Path $key -Force | Out-Null
