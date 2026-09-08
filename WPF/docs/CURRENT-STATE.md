@@ -1,8 +1,8 @@
 # Trạng thái bàn giao
 
-## Gỡ Debloat/Optimize — local
+## Gỡ Debloat/Optimize — source trên main
 
-Thẻ Optimize Windows bị ẩn trong cả Developer và Public. Engine helper, cây Win11Debloat vendor, script/fixture engine và mục Debloat trong Windows Setting được gỡ khỏi source đóng gói. Cấu hình Windows tăng lên schema 3; cấu hình schema 1/2 được đọc tương thích và tự loại mục Debloat trong bộ nhớ. Developer còn Install Software, Driver, Setting; Public còn Install Software và Driver. Build net48 và net10 sạch 0 warning/0 error; net48 đạt 71 logic tests cùng 7 WPF checks, net10 đạt 53 logic tests cùng 6 WPF checks. Output net48 mới có 13 file cho Developer và 15 file cho Public, không có tệp Debloat/Optimize; Public validate config thoát mã 0. Bản Developer net48 thật đã được mở để người dùng kiểm tra. Không chạy Install hoặc thay đổi Windows thật. Thay đổi này chưa commit/push/phát hành.
+Thẻ Optimize Windows bị ẩn trong cả Developer và Public. Engine helper, cây Win11Debloat vendor, script/fixture engine và mục Debloat trong Windows Setting được gỡ khỏi source đóng gói. Cấu hình Windows tăng lên schema 3; cấu hình schema 1/2 được đọc tương thích và tự loại mục Debloat trong bộ nhớ. Developer còn Install Software, Driver, Setting; Public còn Install Software và Driver. Build net48 và net10 sạch 0 warning/0 error; net48 đạt 71 logic tests cùng 7 WPF checks, net10 đạt 53 logic tests cùng 6 WPF checks. Output net48 mới có 13 file cho Developer và 15 file cho Public, không có tệp Debloat/Optimize; Public validate config thoát mã 0. Bản Developer net48 thật đã được mở để người dùng kiểm tra. Không chạy Install hoặc thay đổi Windows thật. Source đã được push lên `main` tại commit `3497963c`. Chưa tạo Release mới; bootstrap và lệnh `irm` vẫn dùng bản `v0.3.7`.
 
 ## Phát hành v0.3.7 — Optimize engine một EXE
 
