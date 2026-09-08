@@ -1,39 +1,42 @@
 # MiniApps
 
-Ứng dụng Windows gọn nhẹ, giao diện WPF sáng dịu, sử dụng .NET Framework 4.8 có sẵn trên Windows 10 21H2+ và Windows 11.
+MiniApps là ứng dụng WPF gọn nhẹ dành cho Windows 10/11 x64, ưu tiên .NET Framework 4.8 và có gói .NET 10 self-contained dự phòng.
 
-- **Install app:** cài ứng dụng song song, chọn Office 2024 hoặc WPS, tự nhận diện ứng dụng đã cài và hiển thị tiến trình.
-- **Optimize Windows:** giao diện preview mô phỏng; chưa áp dụng tối ưu hệ thống.
-- **Driver:** đọc hãng, model, host, serial và mở trang hỗ trợ chính hãng.
-- **Setting:** tìm kiếm, thêm/sửa/xóa ứng dụng và lệnh Windows; lưu hoặc hủy bản nháp theo từng tab.
+## Cài nhanh
 
-## Build và preview
-
-Trên máy phát triển có .NET SDK hiện đại:
-
-```powershell
-./WPF/Publish.ps1
-./WPF/Preview.ps1
-```
-
-Preview không cài ứng dụng hoặc áp dụng thiết lập Windows. Gói net48 x64 hiện khoảng 0,45 MiB, không đóng gói .NET Desktop Runtime.
-
-## Kiểm thử
-
-```powershell
-dotnet build WPF/MiniApps.Tests -c Release
-./WPF/MiniApps.Tests/bin/Release/net48/MiniApps.Tests.exe
-powershell -NoProfile -ExecutionPolicy Bypass -File WPF/Test-Bootstrap.ps1
-```
-
-## Phát hành
-
-Build tạo ZIP, SHA-256 và manifest trong `WPF/artifacts`. Các file này phải được tải lên GitHub Release tương ứng trước khi bootstrap trực tuyến sử dụng được:
+Mở PowerShell và chạy:
 
 ```powershell
 irm https://raw.githubusercontent.com/mson-ssh/miniapp/main/WPF/bootstrap.ps1 | iex
 ```
 
-Mã nguồn đã kiểm thử cục bộ trên .NET Framework 4.8 x64. Kiểm thử trên Windows 10/11 sạch còn cần hoàn tất; ARM64 chưa được xác minh. Bootstrap kiểm tra Framework, xác minh gói tải và dọn thư mục phiên sau khi ứng dụng cùng tiến trình con kết thúc.
+`irm` là bí danh của `Invoke-RestMethod`. Bootstrap tự yêu cầu quyền Administrator, chọn runtime phù hợp, xác minh manifest/kích thước/SHA-256 của gói rồi mới chạy.
 
-Xem [tài liệu chi tiết](WPF/README.md) và [kế hoạch chuyển đổi net48](WPF/NET48-MIGRATION-PLAN.md).
+Lệnh trên hiện tải Release đã xác minh `v0.3.5`. Source mới trên nhánh `main` không tự xuất hiện trong lệnh cài cho đến khi một Release mới được tạo, kiểm tra đủ asset và cập nhật bootstrap.
+
+## Chức năng
+
+- **Install Software:** cài catalog ứng dụng, chọn Office 2024 hoặc WPS, chạy EXE song song và xếp hàng MSI. Smart Skip net48 kiểm tra phần mềm đã cài và ghi bằng chứng trước khi quyết định tải/chạy installer.
+- **Driver:** đọc host, hãng, model, serial và mở trang hỗ trợ chính thức của nhà sản xuất; chưa tự tải hoặc cài driver.
+- **Optimize Windows:** tích hợp Win11Debloat cho net48, chạy Debloatware cùng các tùy chỉnh Windows trong một lượt có log, diagnostics, backup và kiểm soát worker quá hạn.
+- **Setting:** quản lý catalog ứng dụng và Windows Setting trong bản Developer.
+
+## Edition
+
+- **Public:** chỉ hiển thị **Install Software** và **Driver**.
+- **Developer:** hiển thị đủ **Install Software**, **Optimize Windows**, **Driver** và **Setting**.
+- Cả hai edition đều yêu cầu Administrator ngay khi khởi động.
+
+## Build và kiểm thử
+
+```powershell
+dotnet build ./WPF/MiniApps.Tests/MiniApps.Tests.csproj -c Release -f net48
+./WPF/MiniApps.Tests/bin/Release/net48/MiniApps.Tests.exe
+
+dotnet build ./WPF/MiniApps.Tests/MiniApps.Tests.csproj -c Release -f net10.0-windows
+./WPF/MiniApps.Tests/bin/Release/net10.0-windows/MiniApps.Tests.exe
+
+./WPF/Run-Developer.ps1 -Target net48
+```
+
+Xem [hướng dẫn WPF](WPF/README.md), [kiến trúc](WPF/docs/ARCHITECTURE.md), [quy trình phát triển](WPF/docs/DEVELOPMENT.md) và [trạng thái hiện tại](WPF/docs/CURRENT-STATE.md).
