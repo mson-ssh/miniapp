@@ -32,7 +32,8 @@ function New-MiniAppsPackage {
     if ($LASTEXITCODE -ne 0) { throw "Publish failed for $Target." }
 
     $packagedConfig = Join-Path $stage 'ReleaseConfig'
-    Copy-Item -LiteralPath $releaseConfig -Destination $packagedConfig -Recurse
+    New-Item -Path $packagedConfig -ItemType Directory -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $releaseConfig 'apps.json'), (Join-Path $releaseConfig 'windows.json') -Destination $packagedConfig
     $validation = Start-Process -FilePath (Join-Path $stage 'MiniApps.exe') -ArgumentList @('--validate-config', '--config-root', ('"' + $packagedConfig + '"')) -Wait -PassThru -WindowStyle Hidden
     if ($validation.ExitCode -ne 0) { throw "ReleaseConfig validation failed for $Target." }
 
