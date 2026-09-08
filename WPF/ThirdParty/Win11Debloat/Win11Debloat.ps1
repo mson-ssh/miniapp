@@ -12,6 +12,16 @@ param (
     [switch]$RunDefaults,
     [switch]$RunDefaultsLite,
     [switch]$RunSavedSettings,
+    [switch]$MiniApps,
+    [string]$MiniAppsBackupPath,
+    [string]$MiniAppsBridgePath,
+    [string]$MiniAppsAppxWorkerPath,
+    [ValidateSet('All', 'Features', 'RemoveApps')]
+    [string]$MiniAppsLane = 'All',
+    [ValidateRange(30, 1800)]
+    [int]$MiniAppsAppTimeoutSeconds = 180,
+    [ValidateRange(300, 7200)]
+    [int]$MiniAppsRemoveAppsTimeoutSeconds = 1200,
     [string]$Config,
     [string]$Apps,
     [string]$AppRemovalTarget,
@@ -185,6 +195,20 @@ $script:SavedSettingsFilePath = Join-Path $configPath 'LastUsedSettings.json'
 $script:DefaultLogPath = Join-Path $logsPath 'Win11Debloat.log'
 $script:RegfilesPath = Join-Path $PSScriptRoot 'Regfiles'
 $script:RegistryBackupsPath = Join-Path $PSScriptRoot 'Backups'
+$script:MiniAppsMode = [bool]$MiniApps
+$script:MiniAppsAppTimeoutSeconds = $MiniAppsAppTimeoutSeconds
+$script:MiniAppsRemoveAppsTimeoutSeconds = $MiniAppsRemoveAppsTimeoutSeconds
+$script:MiniAppsAppxWorkerPath = $MiniAppsAppxWorkerPath
+$script:MiniAppsLane = $MiniAppsLane
+if ($script:MiniAppsMode) {
+    if ([string]::IsNullOrWhiteSpace($MiniAppsBackupPath) -or -not [IO.Path]::IsPathRooted($MiniAppsBackupPath)) {
+        throw 'MiniApps requires an absolute Registry backup path.'
+    }
+    if ([string]::IsNullOrWhiteSpace($MiniAppsAppxWorkerPath) -or -not (Test-Path -LiteralPath $MiniAppsAppxWorkerPath -PathType Leaf)) {
+        throw 'MiniApps Appx worker is missing.'
+    }
+    $script:RegistryBackupsPath = [IO.Path]::GetFullPath($MiniAppsBackupPath)
+}
 $script:AssetsPath = Join-Path $PSScriptRoot 'Assets'
 $script:AppSelectionSchema = Join-Path $schemasPath 'AppSelectionWindow.xaml'
 $script:MainWindowSchema = Join-Path $schemasPath 'MainWindow.xaml'
@@ -198,7 +222,7 @@ $script:RestoreBackupWindowSchema = Join-Path $schemasPath 'RestoreBackupWindow.
 $script:LoadAppsDetailsScriptPath = Join-Path (Join-Path $scriptsPath 'FileIO') 'Import-AppDetailsFromJson.ps1'
 $script:TestAppInWingetListScriptPath = Join-Path (Join-Path $scriptsPath 'AppRemoval') 'Test-AppInWingetList.ps1'
 
-$script:ControlParams = 'WhatIf', 'Confirm', 'Verbose', 'Debug', 'LogPath', 'Silent', 'Sysprep', 'User', 'SkipExplorerRestart', 'SkipRegistryBackup', 'RunDefaults', 'RunDefaultsLite', 'RunSavedSettings', 'Config', 'CLI', 'AppRemovalTarget'
+$script:ControlParams = 'WhatIf', 'Confirm', 'Verbose', 'Debug', 'LogPath', 'Silent', 'Sysprep', 'User', 'SkipExplorerRestart', 'SkipRegistryBackup', 'RunDefaults', 'RunDefaultsLite', 'RunSavedSettings', 'Config', 'CLI', 'AppRemovalTarget', 'MiniApps', 'MiniAppsBackupPath', 'MiniAppsBridgePath', 'MiniAppsAppxWorkerPath', 'MiniAppsLane', 'MiniAppsAppTimeoutSeconds', 'MiniAppsRemoveAppsTimeoutSeconds'
 
 # Script-level variables for GUI elements
 $script:GuiWindow = $null
@@ -208,6 +232,9 @@ $script:ApplySubStepCallback = $null
 $script:RegistryImportFailures = 0
 $script:AppRemovalFailures = 0
 $script:AppRemovalVerificationUnavailable = $false
+$script:MiniAppsWorkerOverdue = $false
+$script:MiniAppsOverdueMessage = ''
+$script:MiniAppsCurrentFeatureId = $null
 
 # Check if current PowerShell environment is limited by security policies
 if ($ExecutionContext.SessionState.LanguageMode -ne "FullLanguage") {
@@ -599,11 +626,28 @@ else {
     Write-CliHeader 'Configuration'
 }
 
+# RunDefaults normally combines Windows features and app removal. MiniApps runs those
+# groups in separate concurrent lanes, so retain upstream compatibility filtering while
+# removing only the app-removal work from the Features lane.
+if ($script:MiniAppsMode -and $script:MiniAppsLane -eq 'Features') {
+    $script:Params.Remove('RemoveApps')
+    $script:Params.Remove('Apps')
+}
+
 # If the number of keys in ControlParams equals the number of keys in Params then no modifications/changes were selected
 #  or added by the user, and the script can exit without making any changes.
 if (($controlParamsCount -eq $script:Params.Keys.Count) -or ($script:Params.Keys.Count -eq 1 -and ($script:Params.Keys -contains 'CreateRestorePoint' -or $script:Params.Keys -contains 'Apps'))) {
     Write-Output "The script completed without making any changes."
     Wait-ForKeyPress
+}
+
+# MiniApps is a first-class non-interactive host. Load its reporting adapter directly
+# instead of rewriting this entry point at run time.
+if ($script:MiniAppsMode) {
+    if ([string]::IsNullOrWhiteSpace($MiniAppsBridgePath) -or -not (Test-Path -LiteralPath $MiniAppsBridgePath -PathType Leaf)) {
+        throw 'MiniApps task reporting adapter is missing.'
+    }
+    . ([IO.Path]::GetFullPath($MiniAppsBridgePath))
 }
 
 # Execute all selected/provided parameters using the consolidated function

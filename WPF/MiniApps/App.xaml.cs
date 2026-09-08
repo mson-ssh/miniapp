@@ -10,7 +10,11 @@ public partial class App : Application
     {
         base.OnStartup(e);
         var configRoot = Option(e.Args, "--config-root");
-        var headless = e.Args.Contains("--validate-config") || e.Args.Contains("--initialize-release-config");
+        var headless = e.Args.Contains("--validate-config") || e.Args.Contains("--initialize-release-config")
+#if NET48
+            || e.Args.Contains("--startup-smoke-test")
+#endif
+            ;
         try
         {
 #if MINIAPPS_DEVELOPER
@@ -47,6 +51,10 @@ public partial class App : Application
 #endif
             var window = new MainWindow(model);
             MainWindow = window;
+#if NET48
+            if (e.Args.Contains("--startup-smoke-test"))
+                window.Loaded += (_, _) => Dispatcher.BeginInvoke(new Action(() => { window.Close(); Shutdown(0); }));
+#endif
             window.Show();
         }
         catch (Exception ex)

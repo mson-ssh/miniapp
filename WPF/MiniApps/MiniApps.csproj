@@ -39,5 +39,10 @@
     <Content Remove="Scripts\Optimize-TaskBridge.ps1" />
     <Content Remove="Scripts\Expand-OptimizeArchive.ps1" />
     <Content Remove="Scripts\Copy-OptimizeEngine.ps1" />
+    <Content Remove="Scripts\Configure-OptimizeEngine.ps1" />
+    <Content Remove="Scripts\Optimize-WorkerMonitor.ps1" />
+    <Content Remove="Scripts\Invoke-MiniAppsAppxWorker.ps1" />
+    <Content Remove="Scripts\Invoke-MiniAppsWingetWorker.ps1" />
+    <Content Remove="Scripts\Optimize-ParallelEngines.ps1" />
   </ItemGroup>
 </Project>

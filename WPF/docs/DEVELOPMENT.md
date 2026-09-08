@@ -18,13 +18,19 @@ Test hiện dùng fake runner/download và WPF mô phỏng, không chạy instal
 & ./Test-Bootstrap.ps1
 ```
 
-Mở preview sau khi sửa tính năng:
+Gói Public net48 có cờ nội bộ `--startup-smoke-test`: cờ này vẫn tạo cửa sổ WPF thật rồi tự đóng sau sự kiện Loaded, trả mã 0 nếu khởi động thành công. Kết hợp với `--preview` khi kiểm tra output để bảo đảm không có tác vụ thật được chạy.
+
+Mở bản Developer thật sau khi sửa tính năng:
 
 ```powershell
-& ./Preview.ps1 -Target net48 -Developer -Dotnet dotnet
+& ./Run-Developer.ps1 -Target net48 -Dotnet dotnet
 ```
 
-Preview này đọc/ghi `ReleaseConfig`, do đó lưu trong Setting là thay đổi thật cần review diff. Nếu executable đang bị khóa, đóng đúng cửa sổ preview sau khi kiểm tra không có tác vụ hoặc bản nháp cần giữ; không kill mọi process MiniApps.
+Bản này không truyền `--preview` hoặc `--developer-preview`: Setting đọc/ghi `ReleaseConfig` và các nút tác vụ có thể thực thi thật. AI chỉ build/mở ứng dụng; người dùng trực tiếp quyết định khi nào bấm Install hoặc Optimize. Mỗi build dùng thư mục riêng để không ghi đè executable đang mở. `Preview.ps1` vẫn dùng khi cần dữ liệu giả, không mạng và không thay đổi hệ thống.
+
+### Xác minh Optimize trên máy thật (tầng 3)
+
+Sau khi người dùng trực tiếp bấm Optimize, ghi nhận trạng thái cuối trên giao diện và mở thư mục nhật ký từ nút **Mở nhật ký**. Một lượt đủ bằng chứng cần có `session.log`, `Win11Debloat.log`, `upstream-stderr.txt`, `runtime-diagnostics.json` và thư mục `Backups` chứa ít nhất một tệp `Win11Debloat-RegistryBackup-*.json`. Đối chiếu `Lifecycle`, `ExitCode`, số tác vụ và PID trong diagnostics với giao diện; kiểm tra tiến trình runner/engine đã thoát. Sau khi đóng MiniApps, chạy lại bootstrap để xác nhận phiên tạm cũ được dọn mà thư mục `OptimizeLogs` vẫn còn.
 
 ## Mang theo và bỏ qua
 

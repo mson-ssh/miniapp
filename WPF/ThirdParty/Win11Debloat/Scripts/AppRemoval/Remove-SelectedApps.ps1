@@ -37,8 +37,10 @@ function Remove-SelectedApps {
 
     $failuresBefore = $script:AppRemovalFailures
     $targetUser = Get-TargetUserForAppRemoval
+    $miniAppsTaskId = if ($script:MiniAppsCurrentFeatureId) { $script:MiniAppsCurrentFeatureId } else { 'RemoveApps' }
     $appCount = @($appsList).Count
     $appIndex = 0
+    $miniAppsDeadline = if ($script:MiniAppsMode) { [Diagnostics.Stopwatch]::StartNew() } else { $null }
 
     $edgeIds = @('Microsoft.Edge', 'XPFFTQ037JWMHS')
     $wingetRemovedApps = @()
@@ -46,6 +48,13 @@ function Remove-SelectedApps {
 
     Foreach ($app in $appsList) {
         if ($script:CancelRequested) { return $false }
+        if ($miniAppsDeadline -and $miniAppsDeadline.Elapsed.TotalSeconds -ge $script:MiniAppsRemoveAppsTimeoutSeconds) {
+            $script:MiniAppsWorkerOverdue = $true
+            $script:MiniAppsOverdueMessage = "$miniAppsTaskId exceeded $($script:MiniAppsRemoveAppsTimeoutSeconds) seconds."
+            Write-MiniAppsTask 'OVERDUE' $miniAppsTaskId 'Overall app-removal deadline reached; no more packages will start.'
+            Write-Warning "MiniApps stopped scheduling app removals after $($script:MiniAppsRemoveAppsTimeoutSeconds) seconds."
+            return $false
+        }
 
         $appIndex++
 
@@ -54,6 +63,9 @@ function Remove-SelectedApps {
         }
 
         Write-Host "Removing $app"
+        if ($script:MiniAppsMode -and (Get-Command Write-MiniAppsTask -ErrorAction SilentlyContinue)) {
+            Write-MiniAppsTask 'START' $miniAppsTaskId "Removing app $appIndex/${appCount}: $app"
+        }
 
         if ((Get-AppRemovalMethod $app) -eq 'WinGet') {
             $removalSucceeded = Remove-WinGetApp -app $app
@@ -152,6 +164,43 @@ function Remove-WinGetApp {
     $uninstallCommandSucceeded = $true
     $exitCode = $null
     try {
+        if ($script:MiniAppsMode) {
+            $workerPath = Join-Path (Split-Path -Parent $script:MiniAppsAppxWorkerPath) 'Invoke-MiniAppsWingetWorker.ps1'
+            if (-not (Test-Path -LiteralPath $workerPath -PathType Leaf)) { throw 'MiniApps WinGet worker is missing.' }
+            $workerDirectory = Join-Path $LogPath 'WingetWorkers'
+            [IO.Directory]::CreateDirectory($workerDirectory) | Out-Null
+            $leaf = [regex]::Replace($app, '[^a-zA-Z0-9._-]', '_')
+            $resultPath = Join-Path $workerDirectory ($leaf + '.result.json')
+            $workerLogPath = Join-Path $workerDirectory ($leaf + '.log')
+            $quote = { param([string]$value) "'" + $value.Replace("'", "''") + "'" }
+            $workerCommand = "& $(& $quote $workerPath) -AppId $(& $quote $app) -ResultPath $(& $quote $resultPath) -LogPath $(& $quote $workerLogPath)"
+            $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($workerCommand))
+            $start = New-Object Diagnostics.ProcessStartInfo
+            $start.FileName = Join-Path $PSHOME 'powershell.exe'
+            $start.Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' + $encoded
+            $start.UseShellExecute = $false
+            $start.CreateNoWindow = $true
+            $worker = [Diagnostics.Process]::Start($start)
+            if (-not $worker) { throw "Unable to start the MiniApps WinGet worker for $app." }
+            try {
+                [Console]::WriteLine('MINIAPPS_APPX_WORKER_PID:' + $worker.Id)
+                $completed = Wait-MiniAppsOptimizeWorker -Process $worker -TimeoutSeconds $TimeoutSeconds -OnOverdue {
+                    Write-MiniAppsTask 'OVERDUE' $script:MiniAppsCurrentFeatureId "Overdue: WinGet is still processing $app"
+                }
+                if (-not $completed) {
+                    $script:MiniAppsWorkerOverdue = $true
+                    $script:MiniAppsOverdueMessage = "WinGet worker for $app exceeded $TimeoutSeconds seconds and remains active."
+                    throw [TimeoutException]::new($script:MiniAppsOverdueMessage)
+                }
+                if (-not (Test-Path -LiteralPath $resultPath -PathType Leaf)) { throw "WinGet worker for $app exited without a result." }
+                $workerResult = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+                Write-WinGetUninstallOutput -Output $workerResult.Output
+                $exitCode = $workerResult.ExitCode
+                $uninstallCommandSucceeded = [bool]$workerResult.Success
+            }
+            finally { $worker.Dispose() }
+        }
+        else {
         $uninstallResult = Invoke-NonBlocking -ScriptBlock {
             param($appId)
             $output = @(& winget uninstall --accept-source-agreements --disable-interactivity --id $appId 2>&1)
@@ -163,6 +212,7 @@ function Remove-WinGetApp {
         Write-WinGetUninstallOutput -Output $(if ($uninstallResult) { $uninstallResult.Output } else { $null })
         $exitCode = if ($uninstallResult) { $uninstallResult.ExitCode } else { 'unknown' }
         Write-Verbose "WinGet uninstall for $app returned exit code $exitCode."
+        }
     }
     catch {
         $uninstallCommandSucceeded = $false
@@ -224,8 +274,50 @@ function Remove-AppxApp {
 
     $appPattern = '*' + $app + '*'
 
+    if ($script:MiniAppsMode) {
+        $workerDirectory = Join-Path $LogPath 'AppxWorkers'
+        [IO.Directory]::CreateDirectory($workerDirectory) | Out-Null
+        $leaf = '{0:D3}-{1}' -f $appIndex, ([regex]::Replace($app, '[^a-zA-Z0-9._-]', '_'))
+        $resultPath = Join-Path $workerDirectory ($leaf + '.result.json')
+        $workerLogPath = Join-Path $workerDirectory ($leaf + '.error.log')
+        $quote = { param([string]$value) "'" + $value.Replace("'", "''") + "'" }
+        $quotedWorkerPath = & $quote $script:MiniAppsAppxWorkerPath
+        $quotedPattern = & $quote $appPattern
+        $quotedTarget = & $quote $targetUser
+        $quotedResult = & $quote $resultPath
+        $quotedLog = & $quote $workerLogPath
+        $workerCommand = "& $quotedWorkerPath -AppPattern $quotedPattern -TargetUser $quotedTarget -ResultPath $quotedResult -LogPath $quotedLog"
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($workerCommand))
+        $start = New-Object Diagnostics.ProcessStartInfo
+        $start.FileName = Join-Path $PSHOME 'powershell.exe'
+        $start.Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' + $encoded
+        $start.UseShellExecute = $false
+        $start.CreateNoWindow = $true
+        $worker = [Diagnostics.Process]::Start($start)
+        if (-not $worker) { throw "Unable to start the MiniApps Appx worker for $app." }
+        try {
+            [Console]::WriteLine('MINIAPPS_APPX_WORKER_PID:' + $worker.Id)
+            $completed = Wait-MiniAppsOptimizeWorker -Process $worker -TimeoutSeconds $script:MiniAppsAppTimeoutSeconds -OnOverdue {
+                Write-MiniAppsTask 'OVERDUE' $miniAppsTaskId "Overdue: Windows is still processing $app"
+            }
+            if (-not $completed) {
+                $script:MiniAppsWorkerOverdue = $true
+                $script:MiniAppsOverdueMessage = "Appx worker for $app exceeded $($script:MiniAppsAppTimeoutSeconds) seconds and remains active."
+                throw [TimeoutException]::new("Appx worker for $app exceeded $($script:MiniAppsAppTimeoutSeconds) seconds and remains active.")
+            }
+            if (-not (Test-Path -LiteralPath $resultPath -PathType Leaf)) {
+                throw "Appx worker for $app exited without a result."
+            }
+            $workerResult = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+            return [bool]$workerResult.Success
+        }
+        finally {
+            $worker.Dispose()
+        }
+    }
+
     try {
-        $removalResult = Invoke-NonBlocking -ScriptBlock {
+        $removalResult = Invoke-NonBlocking -TimeoutSeconds $(if ($script:MiniAppsMode) { $script:MiniAppsAppTimeoutSeconds } else { 0 }) -ScriptBlock {
             param($pattern, $target)
 
             $removalErrors = @()
@@ -350,7 +442,7 @@ function Request-EdgeForceRemove {
     .DESCRIPTION
     Writes directly to HKEY_USERS\Default\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce
     via the PowerShell registry API within Invoke-WithTargetUserHive,
-    which handles hive loading and HKEY_USERS\Default → SID remapping.
+    which handles hive loading and HKEY_USERS\Default to SID remapping.
     Used instead of static .reg files to avoid file dependency for each WinGet app.
 
     The winget command is Base64-encoded and invoked via powershell.exe -EncodedCommand
@@ -373,7 +465,7 @@ function Set-RunOnceWingetTask {
 
     # Escape single quotes in appId, then wrap in single quotes so cmd/pwsh metacharacters
     # like & | < > ^ " are treated as literals. Base64-encode the whole command so the
-    # RunOnce value contains only [A-Za-z0-9+/=] — safe in any shell parser.
+    # RunOnce value contains only [A-Za-z0-9+/=], safe in any shell parser.
     $escapedAppId = $appId.Replace("'", "''")
     $wingetCommand = "winget uninstall --accept-source-agreements --disable-interactivity --id '$escapedAppId'"
     $encodedWingetCommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($wingetCommand))

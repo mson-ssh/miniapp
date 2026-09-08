@@ -61,6 +61,9 @@ public enum OptimizeTaskState
     Succeeded,
     Skipped,
     Failed,
+#if NET48
+    Overdue,
+#endif
     NotConfirmed
 }
 
@@ -69,6 +72,8 @@ public sealed class OptimizePreviewRow(string id, string name, string descriptio
     public string Id { get; } = id;
     public string Name { get; } = name;
     public string Description { get; } = description;
+    public string Category => Id.Equals("RemoveApps", StringComparison.OrdinalIgnoreCase) ||
+        Id.Equals("remove-apps", StringComparison.OrdinalIgnoreCase) ? "Debloatware" : "Optimize Windows";
     private string status = "Sẵn sàng";
     public string Status { get => status; set => Set(ref status, value); }
     private OptimizeTaskState state = OptimizeTaskState.Ready;
@@ -78,13 +83,20 @@ public sealed class OptimizePreviewRow(string id, string name, string descriptio
         set
         {
             if (!Set(ref state, value)) return;
-            Raise(nameof(IsRunning)); Raise(nameof(IsSucceeded)); Raise(nameof(IsSkipped)); Raise(nameof(IsFailed)); Raise(nameof(IsWaiting));
+            Raise(nameof(IsRunning)); Raise(nameof(IsSucceeded)); Raise(nameof(IsSkipped)); Raise(nameof(IsFailed)); Raise(nameof(IsOverdue)); Raise(nameof(IsNotConfirmed)); Raise(nameof(IsWaiting));
         }
     }
     public bool IsRunning => State == OptimizeTaskState.Running;
     public bool IsSucceeded => State == OptimizeTaskState.Succeeded;
     public bool IsSkipped => State == OptimizeTaskState.Skipped;
-    public bool IsFailed => State is OptimizeTaskState.Failed or OptimizeTaskState.NotConfirmed;
+    public bool IsFailed => State == OptimizeTaskState.Failed;
+    public bool IsOverdue =>
+#if NET48
+        State == OptimizeTaskState.Overdue;
+#else
+        false;
+#endif
+    public bool IsNotConfirmed => State == OptimizeTaskState.NotConfirmed;
     public bool IsWaiting => State is OptimizeTaskState.Ready or OptimizeTaskState.Waiting;
     private double progress;
     public double Progress { get => progress; set => Set(ref progress, value); }

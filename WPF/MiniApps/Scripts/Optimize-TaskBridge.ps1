@@ -1,15 +1,20 @@
 # Loaded into the pinned upstream script immediately before Invoke-AllChanges.
 # Console output must not enter the success pipeline consumed as a feature Boolean.
+. (Join-Path $PSScriptRoot 'Optimize-WorkerMonitor.ps1')
+
 function Write-MiniAppsTask {
     param([string]$Event, [string]$Id, [string]$Message)
     [Console]::WriteLine('MINIAPPS_TASK_JSON:' + (@{ event = $Event; id = $Id; message = $Message } | ConvertTo-Json -Compress))
 }
 $script:MiniAppsFeatureApply = ${function:Invoke-FeatureApply}
-$script:MiniAppsExpectedIds = @('RemoveApps') + @(
-    (Get-Content -LiteralPath $script:DefaultSettingsFilePath -Raw | ConvertFrom-Json).Settings |
-        Where-Object { $_.Name -ne 'CreateRestorePoint' -and $_.Value -eq $true } |
-        ForEach-Object { $_.Name }
-)
+$defaultFeatureIds = @((Get-Content -LiteralPath $script:DefaultSettingsFilePath -Raw | ConvertFrom-Json).Settings |
+    Where-Object { $_.Name -ne 'CreateRestorePoint' -and $_.Value -eq $true } |
+    ForEach-Object { $_.Name })
+$script:MiniAppsExpectedIds = switch ($script:MiniAppsLane) {
+    'Features' { @($defaultFeatureIds) }
+    'RemoveApps' { @('RemoveApps') }
+    default { @('RemoveApps') + @($defaultFeatureIds) }
+}
 foreach ($id in $script:Params.Keys) {
     if ($script:MiniAppsExpectedIds -contains $id) { Write-MiniAppsTask 'QUEUED' $id '' }
 }
@@ -22,6 +27,8 @@ function Invoke-FeatureApply {
     param([Parameter(Mandatory)][string]$FeatureId)
     Write-MiniAppsTask 'START' $FeatureId ''
     $failuresBefore = $script:AppRemovalFailures
+    $previousFeatureId = $script:MiniAppsCurrentFeatureId
+    $script:MiniAppsCurrentFeatureId = $FeatureId
     try {
         $result = & $script:MiniAppsFeatureApply -FeatureId $FeatureId
         $successful = ($result -is [bool]) -and $result -and ($script:AppRemovalFailures -eq $failuresBefore)
@@ -29,12 +36,16 @@ function Invoke-FeatureApply {
             $successful = $false
         }
         if ($successful) { Write-MiniAppsTask 'DONE' $FeatureId '' }
+        elseif ($script:MiniAppsWorkerOverdue) { return $result }
         else { Write-MiniAppsTask 'ERROR' $FeatureId 'Upstream failed or could not verify this operation. See log.' }
         # Preserve upstream return semantics and failure accounting.
         return $result
     }
     catch {
-        Write-MiniAppsTask 'ERROR' $FeatureId $_.Exception.Message
+        if (-not $script:MiniAppsWorkerOverdue) {
+            Write-MiniAppsTask 'ERROR' $FeatureId $_.Exception.Message
+        }
         throw
     }
+    finally { $script:MiniAppsCurrentFeatureId = $previousFeatureId }
 }

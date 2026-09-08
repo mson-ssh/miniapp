@@ -274,7 +274,11 @@ function Invoke-ApplyFeatures {
         # Compare app-removal failure counts so a feature that only fails due to
         # app removal isn't also double-reported as a feature failure.
         $appRemovalFailuresBefore = $script:AppRemovalFailures
-        if ((-not (Invoke-FeatureApply -FeatureId $featureId)) -and ($script:AppRemovalFailures -eq $appRemovalFailuresBefore)) {
+        $featureSucceeded = Invoke-FeatureApply -FeatureId $featureId
+        if ($script:MiniAppsWorkerOverdue) {
+            throw $script:MiniAppsOverdueMessage
+        }
+        if ((-not $featureSucceeded) -and ($script:AppRemovalFailures -eq $appRemovalFailuresBefore)) {
             $script:FeatureFailures++
         }
         Write-Host ""

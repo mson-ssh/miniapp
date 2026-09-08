@@ -2,6 +2,8 @@
 
 Máy mới / phiên AI mới: đọc [AGENTS.md](AGENTS.md) và [bộ tài liệu kỹ thuật](docs/README.md) trước khi sửa hoặc chạy dự án. Nên mở `WPF/` làm workspace; trạng thái bàn giao nằm trong [CURRENT-STATE.md](docs/CURRENT-STATE.md).
 
+MiniApps luôn yêu cầu quyền Administrator khi khởi động. Nếu người dùng từ chối UAC, ứng dụng không mở.
+
 `v0.3.2` đã phát hành để thử nghiệm net48 qua `irm`. Optimize bỏ kiểm tra checksum ZIP upstream theo yêu cầu, hiển thị bước Chuẩn bị và lỗi PowerShell gốc; giữ kiểm tra gói MiniApps của bootstrap. Gói .NET 10 giữ nguyên từng byte từ v0.3.0, không build lại. Chỉ push mã nguồn ở các lần sau sẽ không tự cập nhật ZIP phát hành.
 
 ## Optimize trên .NET Framework 4.8
@@ -38,7 +40,7 @@ Bản nâng cấp độc lập trong `WPF/`; không sửa hoặc thực thi `../
 - **Developer** chỉ dùng trên máy phát triển, build `net48` với `MiniAppsEdition=Developer`. Sidebar có đủ **Install app**, **Optimize Windows**, **Driver** và **Setting**. Setting tiếp tục quản lý hai nhóm **Ứng dụng** và **Thiết lập Windows**.
 - **Public** là bản người dùng nhận qua `irm`, build với `MiniAppsEdition=Public`. Sidebar chỉ có **Install app**, **Optimize Windows** và **Driver**. ViewModel cũng từ chối điều hướng tới Setting và vô hiệu hóa toàn bộ lệnh thêm/sửa/xóa/lưu; bản Public không có tham số dòng lệnh để bật lại Setting.
 - Cấu hình phát hành chuẩn nằm trong `WPF/ReleaseConfig/apps.json` và `WPF/ReleaseConfig/windows.json`. Bản Developer đọc/ghi hai file này; bản Public chỉ đọc bản sao đã được đóng gói cùng ứng dụng và không dùng cấu hình `%LocalAppData%` của máy khách.
-- `Preview.ps1 -Developer` build/mở đúng bản net48 Developer và truyền đường dẫn cấu hình trong workspace. `Publish.ps1` luôn build Public, kiểm tra schema, ID trùng, URL HTTPS, script rỗng và SHA-256 trước khi tạo gói; cấu hình thiếu hoặc không hợp lệ làm publish thất bại.
+- `Run-Developer.ps1` build/mở bản net48 Developer thật và truyền đường dẫn cấu hình trong workspace. `Preview.ps1` dành cho chế độ mô phỏng. `Publish.ps1` luôn build Public, kiểm tra schema, ID trùng, URL HTTPS, script rỗng và SHA-256 trước khi tạo gói; cấu hình thiếu hoặc không hợp lệ làm publish thất bại.
 - File cấu hình được ghi atomic. Bản Public dừng trước khi cài nếu cấu hình đóng gói thiếu hoặc hỏng, thay vì âm thầm dùng catalog khác.
 - Luồng chỉnh cấu hình được triển khai và kiểm thử trên `net48`. Mã nguồn dual-runtime vẫn dùng chung; cả gói net48 và fallback net10 phát hành đều được build dưới edition Public.
 
@@ -53,7 +55,7 @@ dotnet build WPF/MiniApps/MiniApps.csproj -c Release
 ./WPF/Publish.ps1
 ./WPF/Preview.ps1 -Target net48
 ./WPF/Preview.ps1 -Target net10
-./WPF/Preview.ps1 -Target net48 -Developer # mở Setting và WPF/ReleaseConfig
+./WPF/Run-Developer.ps1 -Target net48      # mở Developer thật, có Setting và WPF/ReleaseConfig
 dotnet build WPF/MiniApps.Tests -c Release
 ./WPF/MiniApps.Tests/bin/Release/net48/MiniApps.Tests.exe
 dotnet ./WPF/MiniApps.Tests/bin/Release/net10.0-windows/MiniApps.Tests.dll

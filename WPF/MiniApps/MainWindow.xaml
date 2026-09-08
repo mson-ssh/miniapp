@@ -22,8 +22,8 @@
               </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
           </Style></ListBox.Resources>
-          <ListBoxItem Content="Install app" />
-          <ListBoxItem Content="Optimize Windows" />
+          <ListBoxItem Content="Install Software" />
+          <ListBoxItem Content="Optimize Windows" Visibility="{Binding CanAccessOptimize, Converter={StaticResource BoolVisibility}}" />
           <ListBoxItem Content="Driver" />
           <ListBoxItem Content="Setting" Visibility="{Binding IsDeveloperEdition, Converter={StaticResource BoolVisibility}}" IsEnabled="{Binding DataContext.IsIdle, RelativeSource={RelativeSource AncestorType=ListBox}}" />
         </ListBox>
@@ -33,7 +33,7 @@
     <Grid Grid.Column="1" Margin="32,28,32,22">
       <Grid Visibility="{Binding IsInstall, Converter={StaticResource BoolVisibility}}">
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-        <StackPanel Margin="0,0,0,22"><TextBlock Text="Install app" FontSize="28" FontWeight="SemiBold" /><TextBlock Text="Ứng dụng cần thiết, Windows theo cách của bạn." Foreground="{StaticResource Muted}" Margin="0,7,0,0" /><TextBlock Text="{Binding Machine}" Style="{StaticResource Caption}" Margin="0,13,0,0" /></StackPanel>
+        <StackPanel Margin="0,0,0,22"><TextBlock Text="Install Software" FontSize="28" FontWeight="SemiBold" /><TextBlock Text="Ứng dụng cần thiết, Windows theo cách của bạn." Foreground="{StaticResource Muted}" Margin="0,7,0,0" /><TextBlock Text="{Binding Machine}" Style="{StaticResource Caption}" Margin="0,13,0,0" /></StackPanel>
         <ScrollViewer x:Name="InstallScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,6,0">
           <StackPanel>
             <Border Style="{StaticResource Panel}" Visibility="{Binding IsReady, Converter={StaticResource BoolVisibility}}">
@@ -100,7 +100,7 @@
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
         <Grid Margin="0,0,0,22">
           <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-          <StackPanel><TextBlock Text="Optimize Windows" FontSize="28" FontWeight="SemiBold" /><TextBlock Text="Tinh gọn Windows bằng cấu hình Default của Win11Debloat." Foreground="{StaticResource Muted}" Margin="0,7,0,0" /></StackPanel>
+          <StackPanel><TextBlock Text="Optimize Windows" FontSize="28" FontWeight="SemiBold" /><TextBlock Text="Tinh gọn Windows bằng engine MiniApps dựa trên Win11Debloat." Foreground="{StaticResource Muted}" Margin="0,7,0,0" /></StackPanel>
           <Border Grid.Column="1" Background="#EEF4FA" BorderBrush="#D8E3EE" BorderThickness="1" CornerRadius="12" Padding="13,6" VerticalAlignment="Center">
             <TextBlock Text="{Binding OptimizeNotice}" Foreground="#365A78" FontSize="11" FontWeight="SemiBold" />
           </Border>
@@ -111,8 +111,11 @@
               <StackPanel>
                 <TextBlock Text="Những thay đổi sẽ được áp dụng" FontSize="20" FontWeight="SemiBold" />
                 <TextBlock Text="{Binding OptimizeDescription}" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,8,0,20" />
-                <ItemsControl ItemsSource="{Binding OptimizeTasks}" Visibility="{Binding UseLegacyOptimizeCards, Converter={StaticResource BoolVisibility}}">
-                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="2" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl ItemsSource="{Binding OptimizeTaskGroups}" Visibility="{Binding UseLegacyOptimizeCards, Converter={StaticResource BoolVisibility}}">
+                  <ItemsControl.GroupStyle><GroupStyle>
+                    <GroupStyle.HeaderTemplate><DataTemplate><TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Foreground="#365A78" Margin="0,10,0,10" /></DataTemplate></GroupStyle.HeaderTemplate>
+                    <GroupStyle.Panel><ItemsPanelTemplate><UniformGrid Columns="2" /></ItemsPanelTemplate></GroupStyle.Panel>
+                  </GroupStyle></ItemsControl.GroupStyle>
                   <ItemsControl.ItemTemplate><DataTemplate>
                     <Border Background="#F7F9FB" BorderBrush="#E2E6EB" BorderThickness="1" CornerRadius="6" Padding="18,16" Margin="0,0,10,10">
                       <StackPanel MinHeight="70">
@@ -123,8 +126,21 @@
                   </DataTemplate></ItemsControl.ItemTemplate>
                 </ItemsControl>
                 <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,0,2" Visibility="{Binding UseOptimizeTaskTimeline, Converter={StaticResource BoolVisibility}}">
-                <ItemsControl ItemsSource="{Binding OptimizeTasks}" x:Name="OptimizeTaskList">
-                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><controls:AnimatedStackPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl ItemsSource="{Binding OptimizeTaskGroups}" x:Name="OptimizeTaskList">
+                  <ItemsControl.GroupStyle><GroupStyle>
+                    <GroupStyle.HeaderTemplate><DataTemplate>
+                      <StackPanel Margin="0,10,10,9">
+                        <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Foreground="#365A78" />
+                        <TextBlock FontSize="11" Foreground="{StaticResource Muted}" Margin="0,3,0,0">
+                          <TextBlock.Style><Style TargetType="TextBlock">
+                            <Setter Property="Text" Value="Tùy chỉnh và tắt các tính năng Windows không cần thiết." />
+                            <Style.Triggers><DataTrigger Binding="{Binding Name}" Value="Debloatware"><Setter Property="Text" Value="Gỡ các ứng dụng mặc định không cần thiết." /></DataTrigger></Style.Triggers>
+                          </Style></TextBlock.Style>
+                        </TextBlock>
+                      </StackPanel>
+                    </DataTemplate></GroupStyle.HeaderTemplate>
+                    <GroupStyle.Panel><ItemsPanelTemplate><controls:AnimatedStackPanel /></ItemsPanelTemplate></GroupStyle.Panel>
+                  </GroupStyle></ItemsControl.GroupStyle>
                   <ItemsControl.ItemTemplate><DataTemplate>
                     <Border x:Name="TaskSurface" Background="#FFFFFF" BorderBrush="#E2E6EB" BorderThickness="1" CornerRadius="8" Padding="16,12" Margin="0,0,10,8" RenderTransformOrigin="0.5,0.5">
                       <Grid>
@@ -151,6 +167,12 @@
                       <DataTrigger Binding="{Binding IsFailed}" Value="True">
                         <Setter TargetName="TaskSurface" Property="Background" Value="#FCF5F5" /><Setter TargetName="TaskSurface" Property="BorderBrush" Value="#D9AEAE" /><Setter TargetName="TaskStatus" Property="Foreground" Value="#8E4747" />
                       </DataTrigger>
+                      <DataTrigger Binding="{Binding IsOverdue}" Value="True">
+                        <Setter TargetName="TaskSurface" Property="Background" Value="#FFF6E8" /><Setter TargetName="TaskSurface" Property="BorderBrush" Value="#D8B979" /><Setter TargetName="TaskStatus" Property="Foreground" Value="#8A5D24" />
+                      </DataTrigger>
+                      <DataTrigger Binding="{Binding IsNotConfirmed}" Value="True">
+                        <Setter TargetName="TaskSurface" Property="Background" Value="#FBF8F1" /><Setter TargetName="TaskSurface" Property="BorderBrush" Value="#D8C9A8" /><Setter TargetName="TaskStatus" Property="Foreground" Value="#806A3E" />
+                      </DataTrigger>
                     </DataTemplate.Triggers>
                   </DataTemplate></ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -167,7 +189,7 @@
         </ScrollViewer>
         <Border Grid.Row="2" BorderBrush="#DDE1E7" BorderThickness="0,1,0,0" Padding="0,16,0,0" Margin="0,12,0,0">
           <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-            <StackPanel Margin="0,0,18,0"><TextBlock Text="{Binding OptimizeBlockingMessage}" Foreground="#8A5D24" FontSize="12" TextWrapping="Wrap" /><TextBlock Text="Một lượt áp dụng toàn bộ profile. Có thể tiếp tục xem Install app và Driver trong lúc chạy." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0" /></StackPanel>
+            <StackPanel Margin="0,0,18,0"><TextBlock Text="{Binding OptimizeBlockingMessage}" Foreground="#8A5D24" FontSize="12" TextWrapping="Wrap" /><TextBlock Text="Một lượt áp dụng toàn bộ profile. Có thể tiếp tục xem Install Software và Driver trong lúc chạy." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0" /></StackPanel>
             <Button Grid.Column="1" Content="Mở nhật ký" Command="{Binding OpenOptimizeLogCommand}" Visibility="{Binding HasOptimizeLog, Converter={StaticResource BoolVisibility}}" VerticalAlignment="Center" Margin="0,0,10,0" />
             <Button Grid.Column="2" Content="{Binding OptimizeButtonText}" Command="{Binding OptimizeCommand}" Style="{StaticResource Primary}" Width="145" VerticalAlignment="Center" />
           </Grid>
@@ -286,7 +308,7 @@
                 <Grid Grid.Column="1" Visibility="{Binding HasSelectedWindows, Converter={StaticResource BoolVisibility}}" Margin="24,20,20,18" DataContext="{Binding SelectedWindows}">
                   <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                   <Grid Margin="0,0,0,14"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Chi tiết thiết lập" FontSize="18" FontWeight="SemiBold" /><TextBlock Text="Lưu cấu hình không chạy câu lệnh." Style="{StaticResource Caption}" Margin="0,5,0,0" /></StackPanel><Button Grid.Column="1" Content="Xóa" Command="{Binding DataContext.DeleteWindowsCommand, RelativeSource={RelativeSource AncestorType=Window}}" Padding="12,6" VerticalAlignment="Top" AutomationProperties.Name="Xóa thiết lập Windows" /></Grid>
-                  <Border Grid.Row="1" Background="#FFF6E8" BorderBrush="#E8D3AE" BorderThickness="1" CornerRadius="4" Padding="10,8" Margin="0,0,0,12" Visibility="{Binding DataContext.IsSelectedDebloat, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolVisibility}}"><TextBlock Text="Debloatware đã được tách khỏi Install app. Optimize Windows hiện đang ở chế độ preview." Foreground="#765327" TextWrapping="Wrap" /></Border>
+                  <Border Grid.Row="1" Background="#FFF6E8" BorderBrush="#E8D3AE" BorderThickness="1" CornerRadius="4" Padding="10,8" Margin="0,0,0,12" Visibility="{Binding DataContext.IsSelectedDebloat, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolVisibility}}"><TextBlock Text="Debloatware đã được tách khỏi Install Software và được thực thi từ thẻ Optimize Windows." Foreground="#765327" TextWrapping="Wrap" /></Border>
                   <StackPanel Grid.Row="2"><TextBlock Text="Tên thiết lập" Margin="0,0,0,6" /><TextBox x:Name="WindowsNameEditor" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Tên thiết lập" /></StackPanel>
                   <StackPanel Grid.Row="3" Margin="0,12,0,0"><TextBlock Text="Mô tả tác động" Margin="0,0,0,6" /><TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AutomationProperties.Name="Mô tả thiết lập" /></StackPanel>
                   <TextBlock Grid.Row="4" Text="Câu lệnh PowerShell" Margin="0,12,0,6" />

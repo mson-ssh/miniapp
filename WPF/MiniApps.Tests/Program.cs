@@ -16,6 +16,19 @@ async Task WaitWithTimeout(Task task, TimeSpan timeout, CancellationToken token 
     deadline.Cancel();
     await task;
 }
+#if NET48
+if (args.Contains("--smart-skip-audit", StringComparer.OrdinalIgnoreCase))
+{
+    var snapshot = InstalledSoftwareDetector.Capture();
+    foreach (var app in Catalog.Defaults())
+    {
+        var result = InstalledSoftwareDetector.Detect(app, snapshot);
+        Console.WriteLine($"{app.Id}\t{result.State}\t{result.Reason}\t{result.Evidence}");
+    }
+    Console.WriteLine($"READ_ERRORS\t{snapshot.ReadErrors.Count}");
+    return;
+}
+#endif
 Check("Default catalog contains Office/WPS alternatives", () => { var apps = Catalog.Defaults(); Catalog.Validate(apps); Assert(apps.Count == 12 && apps.Count(a => a.Suite.Length > 0) == 2); });
 Check("Reject HTTP", () => { var apps = Catalog.Defaults(); apps[0].Url = "http://example.com/test.exe"; Reject(() => Catalog.Validate(apps)); });
 Check("Reject duplicate IDs", () => { var apps = Catalog.Defaults(); apps[1].Id = apps[0].Id; Reject(() => Catalog.Validate(apps)); });
@@ -23,10 +36,56 @@ Check("Reject path traversal ID", () => { var apps = Catalog.Defaults(); apps[0]
 Check("Reject non-installer URL", () => { var apps = Catalog.Defaults(); apps[0].Url = "https://example.com/a.ps1"; Reject(() => Catalog.Validate(apps)); });
 Check("Installed applications are recognized automatically", () => {
     Assert(DeploymentService.InstalledNameMatches(Catalog.Defaults().Single(a => a.Id == "chrome"), "Google Chrome"));
+    Assert(DeploymentService.InstalledNameMatches(Catalog.Defaults().Single(a => a.Id == "office"), "Microsoft Office LTSC Professional Plus 2024 - en-us"));
+#if NET48
     Assert(DeploymentService.InstalledNameMatches(Catalog.Defaults().Single(a => a.Id == "office"), "Microsoft 365 Apps for enterprise"));
+#endif
+    Assert(DeploymentService.InstalledNameMatches(Catalog.Defaults().Single(a => a.Id == "vc64"), "Microsoft Visual C++ 2015-2022 Redistributable (x64) - 14.44.35211"));
+    Assert(!DeploymentService.InstalledNameMatches(Catalog.Defaults().Single(a => a.Id == "vc64"), "Microsoft Visual C++ 2013 Redistributable (x64) - 12.0.40664"));
     Assert(DeploymentService.InstalledNameMatches(new AppDefinition { Id = "custom", Name = "7-Zip" }, "7-Zip 24.09 (x64)"));
     Assert(!DeploymentService.InstalledNameMatches(new AppDefinition { Id = "custom", Name = "Zoom" }, "Zoom Outlook Plugin"));
 });
+#if NET48
+Check("Smart Skip distinguishes every default product family", () => {
+    var apps = Catalog.Defaults().ToDictionary(app => app.Id);
+    var cases = new[] {
+        ("evkey", "EVKey 4.6", true), ("evkey", "EVKey Helper", false),
+        ("chrome", "Google Chrome", true), ("chrome", "Google Chrome Beta", false),
+        ("klite", "K-Lite Codec Pack 19.8.2 Standard", true), ("klite", "Example K-Lite Codec Pack Helper", false),
+        ("telegram", "Telegram Desktop", true), ("telegram", "Telegram Desktop Updater", false),
+        ("ultraview", "UltraViewer version 6.6.124", true), ("ultraview", "UltraViewer Service", false),
+        ("winrar", "WinRAR 7.23 (64-bit)", true), ("winrar", "WinRAR Shell Extension", false),
+        ("zalo", "Zalo 26.07.10", true), ("zalo", "Zalo Update", false),
+        ("zoom", "Zoom Workplace (64-bit)", true), ("zoom", "Zoom Outlook Plugin", false),
+        ("office", "Microsoft Office Home and Student 2021 - en-us", true), ("office", "Office 16 Click-to-Run Extensibility Component", false),
+        ("office", "Microsoft 365 Apps for enterprise - en-us", true), ("office", "Microsoft Visio Professional 2024", false),
+        ("wps", "WPS Office (12.2.0)", true), ("wps", "WPS Office Update", false),
+        ("vc64", "Microsoft Visual C++ v14 Redistributable (x64) - 14.51.36247", true), ("vc64", "Microsoft Visual C++ 2013 Redistributable (x64) - 12.0.40664", false),
+        ("vc86", "Microsoft Visual C++ 2015-2022 Redistributable (x86) - 14.44.35211", true), ("vc86", "Microsoft Visual C++ v14 Redistributable (x64) - 14.51.36247", false)
+    };
+    foreach (var (id, name, expected) in cases)
+        Assert(DeploymentService.InstalledNameMatches(apps[id], name) == expected);
+});
+Check("Smart Skip uses Office SKU and VC runtime evidence", () => {
+    var apps = Catalog.Defaults().ToDictionary(app => app.Id);
+    var snapshot = new InstalledSoftwareSnapshot();
+    snapshot.OfficeProductReleaseIds.Add("HomeStudent2021Retail");
+    snapshot.VisualCRuntimes.Add(new("x64", true, "v14.51.36247.00", "fixture/x64"));
+    snapshot.VisualCRuntimes.Add(new("x86", true, "v14.51.36247.00", "fixture/x86"));
+    Assert(InstalledSoftwareDetector.Detect(apps["office"], snapshot).State == SoftwareDetectionState.Installed);
+    Assert(InstalledSoftwareDetector.Detect(apps["vc64"], snapshot).State == SoftwareDetectionState.Installed);
+    Assert(InstalledSoftwareDetector.Detect(apps["vc86"], snapshot).State == SoftwareDetectionState.Installed);
+    var oldOnly = new InstalledSoftwareSnapshot();
+    oldOnly.VisualCRuntimes.Add(new("x64", true, "v12.0.40664", "fixture/old"));
+    Assert(InstalledSoftwareDetector.Detect(apps["vc64"], oldOnly).State == SoftwareDetectionState.NotInstalled);
+});
+Check("Smart Skip reports incomplete inventory as Unknown", () => {
+    var snapshot = new InstalledSoftwareSnapshot();
+    snapshot.ReadErrors.Add("fixture access denied");
+    var result = InstalledSoftwareDetector.Detect(Catalog.Defaults().Single(app => app.Id == "chrome"), snapshot);
+    Assert(result.State == SoftwareDetectionState.Unknown && result.Reason.Contains("Không đọc được"));
+});
+#endif
 Check("Reject malformed hash", () => { var apps = Catalog.Defaults(); apps[0].Sha256 = "123"; Reject(() => Catalog.Validate(apps)); });
 Check("PowerShell literals cannot inject code", () => Assert(DeploymentService.Quote("a'; exit 0; '") == "'a''; exit 0; '''"));
 Check("Framework process arguments use Windows quoting rules", () =>
@@ -90,11 +149,17 @@ try
         var path = Path.Combine(dir, "windows.json"); var json = """{"SchemaVersion":99,"Items":[],"RemovedDefaultIds":[]}""";
         File.WriteAllText(path, json); Reject(() => new SettingsStore(dir).LoadWindows()); Assert(File.ReadAllText(path) == json);
     });
-    Check("Public edition hides and locks Setting", () => {
+    Check("Public edition exposes only Install Software and Driver", () => {
         var vm = new MainViewModel(true, developerEdition: false);
-        Assert(!vm.IsDeveloperEdition && !vm.IsSetting && vm.Page == 0);
+        Assert(!vm.IsDeveloperEdition && !vm.CanAccessOptimize && vm.IsInstall && !vm.IsOptimize && !vm.IsSetting && vm.Page == 0);
+        Assert(!vm.OptimizeCommand.CanExecute(null) && !vm.OpenOptimizeLogCommand.CanExecute(null));
+        vm.Page = 1;
+        Assert(vm.Page == 0 && vm.IsInstall && !vm.IsOptimize);
+        vm.Page = 2;
+        Assert(vm.Page == 2 && vm.IsDriver);
         vm.Page = 3;
-        Assert(vm.Page == 0 && !vm.IsSetting);
+        Assert(vm.Page == 2 && vm.IsDriver && !vm.IsSetting);
+        vm.Page = 0;
         Assert(vm.EditableApps.Count == 0 && vm.EditableWindows.Count == 0);
         Assert(!vm.AddCommand.CanExecute(null) && !vm.AddWindowsCommand.CanExecute(null) && !vm.SaveCommand.CanExecute(null));
         vm.AddCommand.Execute(null); vm.AddWindowsCommand.Execute(null); vm.SaveCommand.Execute(null);
@@ -249,14 +314,66 @@ try
         Assert(MainViewModel.IsDebloat(new WindowsSettingDefinition { Id = "Debloat", Action = "Custom" }));
         vm.InstallCommand.Execute(null); Assert(!vm.HasStarted && vm.SystemTasks.Count == 0);
     });
+#if NET48
     Check("Optimize protocol exposes bundled-engine prepare and apply stages", () => {
         Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_STAGE:Preparing", out var prepare) && prepare.Stage == OptimizeStage.Preparing);
         Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_STAGE:Applying", out var apply) && apply.Stage == OptimizeStage.Applying);
         Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_LOG:C:\\Logs", out var log) && log.LogDirectory == "C:\\Logs");
         Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_TASK_JSON:{\"event\":\"START\",\"id\":\"DisableTelemetry\",\"message\":\"running\"}", out var task) && task.Task?.Event == OptimizeTaskEvent.Start && task.Task.Id == "DisableTelemetry");
+        Assert(OptimizeService.TryParseProtocolLine("MINIAPPS_TASK_JSON:{\"event\":\"OVERDUE\",\"id\":\"RemoveApps\",\"message\":\"still active\"}", out var overdue) && overdue.Task?.Event == OptimizeTaskEvent.Overdue);
+        Assert(OptimizeService.TryParseAppxWorkerMetadata("MINIAPPS_APPX_WORKER_PID:1234", out var workerPid) && workerPid == 1234);
         Assert(!OptimizeService.TryParseProtocolLine("MINIAPPS_TASK_JSON:{\"event\":\"999\",\"id\":\"DisableTelemetry\"}", out _));
         Assert(!OptimizeService.TryParseProtocolLine("MINIAPPS_TASK_JSON:{broken", out _));
         Assert(!OptimizeService.TryParseProtocolLine("ordinary upstream output", out _));
+    });
+    Check("Optimize tasks are divided into Debloatware and Windows groups", () => {
+        var tasks = OptimizeTaskCatalog.Defaults();
+        Assert(tasks.Count(task => task.Category == "Debloatware") == 1);
+        Assert(tasks.Single(task => task.Category == "Debloatware").Id == "RemoveApps");
+        Assert(tasks.Count(task => task.Category == "Optimize Windows") == 16);
+        var vm = new MainViewModel(true, developerEdition: false);
+        Assert(vm.OptimizeTaskGroups.Groups != null && vm.OptimizeTaskGroups.Groups.Count == 2);
+    });
+    Check("Optimize service blocks while an Appx worker owns its mutex", () => {
+        var fixture = Path.Combine(root, "optimize-worker-lock"); Directory.CreateDirectory(fixture);
+        var script = Path.Combine(fixture, "Optimize-Defaults.ps1"); File.WriteAllText(script, "fixture only");
+        var mutexName = "Global\\MiniApps.Test.AppxWorker." + Guid.NewGuid().ToString("N");
+        using var held = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        Exception? holderFailure = null;
+        var holder = new Thread(() => {
+            try
+            {
+                using var mutex = new Mutex(false, mutexName);
+                mutex.WaitOne();
+                held.Set();
+                release.Wait();
+                mutex.ReleaseMutex();
+            }
+            catch (Exception ex) { holderFailure = ex; held.Set(); }
+        });
+        holder.Start();
+        if (!held.Wait(TimeSpan.FromSeconds(2))) throw new Exception("Worker mutex fixture did not start.");
+        try
+        {
+            if (holderFailure != null) throw holderFailure;
+            var calls = 0;
+            var service = new OptimizeService(
+                runPowerShell: (_, _, _) => { calls++; return Task.FromResult(0); },
+                isAdministrator: () => true,
+                createMutex: () => new Mutex(false),
+                scriptPath: script,
+                tempRoot: fixture,
+                createWorkerMutex: () => new Mutex(false, mutexName));
+            var result = service.RunAsync(new InlineProgress<OptimizeProgress>(_ => { }), default).GetAwaiter().GetResult();
+            Assert(!result.Succeeded && result.Message.Contains("package") && result.Message.Contains("vẫn đang") && calls == 0);
+        }
+        finally
+        {
+            release.Set();
+            if (!holder.Join(TimeSpan.FromSeconds(2))) throw new Exception("Worker mutex fixture did not stop.");
+        }
+        if (holderFailure != null) throw holderFailure;
     });
     Check("Optimize service rejects incomplete task telemetry", () => {
         var fixture = Path.Combine(root, "optimize-incomplete"); Directory.CreateDirectory(fixture);
@@ -270,7 +387,8 @@ try
             }, isAdministrator: () => true, createMutex: () => new Mutex(false), scriptPath: script, tempRoot: fixture);
         var events = new List<OptimizeProgress>();
         var result = service.RunAsync(new InlineProgress<OptimizeProgress>(events.Add), default).GetAwaiter().GetResult();
-        Assert(!result.Succeeded && result.Message.Contains("16 tác vụ") && events.All(item => item.Stage != OptimizeStage.Completed));
+        if (result.Succeeded || !result.Message.Contains("16 tác vụ") || events.Any(item => item.Stage == OptimizeStage.Completed))
+            throw new Exception($"Incomplete telemetry result was unexpected: succeeded={result.Succeeded}, message={result.Message}, stages={string.Join(",", events.Select(item => item.Stage.ToString()).ToArray())}");
     });
     Check("Optimize service treats a task ERROR as failure even with exit code zero", () => {
         var fixture = Path.Combine(root, "optimize-task-error"); Directory.CreateDirectory(fixture);
@@ -309,6 +427,34 @@ try
         Assert(stages.Where(stage => stage != OptimizeStage.Ready && stage != OptimizeStage.Error).SequenceEqual(new[] { OptimizeStage.Preparing }));
         Assert(Directory.GetDirectories(fixture, "optimize-*").Length == 0);
     });
+    Check("Optimize service writes process lifecycle diagnostics", () => {
+        var fixture = Path.Combine(root, "optimize-diagnostics"); Directory.CreateDirectory(fixture);
+        var script = Path.Combine(fixture, "Optimize-Defaults.ps1"); File.WriteAllText(script, "fixture only");
+        var durableLog = Path.Combine(fixture, "durable-log"); Directory.CreateDirectory(durableLog);
+        var service = new OptimizeService(
+            runPowerShell: (_, _, output) => {
+                output.Report("MINIAPPS_LOG:" + durableLog);
+                output.Report("MINIAPPS_RUNNER_PID:4101");
+                output.Report("MINIAPPS_ENGINE_PID:4102");
+                output.Report("MINIAPPS_ENGINE_PID:4103");
+                output.Report("MINIAPPS_STAGE:Applying");
+                foreach (var task in OptimizeTaskCatalog.Defaults())
+                {
+                    output.Report($"MINIAPPS_TASK_JSON:{{\"event\":\"START\",\"id\":\"{task.Id}\",\"message\":\"\"}}");
+                    output.Report($"MINIAPPS_TASK_JSON:{{\"event\":\"DONE\",\"id\":\"{task.Id}\",\"message\":\"\"}}");
+                }
+                return Task.FromResult(0);
+            }, isAdministrator: () => true, createMutex: () => new Mutex(false), scriptPath: script, tempRoot: fixture);
+        var result = service.RunAsync(new InlineProgress<OptimizeProgress>(_ => { }), default).GetAwaiter().GetResult();
+        Assert(result.Succeeded && result.Message.Contains("Thành công 17") && result.Message.Contains("Chưa chạy 0"));
+        var diagnosticsPath = Path.Combine(durableLog, "runtime-diagnostics.json");
+        Assert(File.Exists(diagnosticsPath));
+        var diagnostics = File.ReadAllText(diagnosticsPath);
+        Assert(diagnostics.Contains("\"Lifecycle\": \"Completed\"") && diagnostics.Contains("\"RunnerPid\": 4101") &&
+            diagnostics.Contains("\"EnginePid\": 4103") && diagnostics.Contains("4102") && diagnostics.Contains("\"EnginePids\":") && diagnostics.Contains("\"Succeeded\": 17") &&
+            diagnostics.Contains(OptimizeService.EngineCommit) && diagnostics.Contains("\"EndedAtUtc\":") && diagnostics.Contains("\"ExitCode\": 0"));
+        Assert(OptimizeService.TryParseRuntimeMetadata("MINIAPPS_ENGINE_PID:999", out var isRunner, out var pid) && !isRunner && pid == 999);
+    });
     Check("Optimize lifecycle locks conflicting actions and completes once", () => {
         var release = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var fake = new FakeOptimizeService(async progress => {
@@ -328,7 +474,7 @@ try
             }
             return new(true, "completed", "");
         });
-        var vm = new MainViewModel(false, developerEdition: false, optimizeService: fake) { Page = 1 };
+        var vm = new MainViewModel(false, developerEdition: true, optimizeService: fake) { Page = 1 };
         Assert(vm.OptimizeTasks.Count == 17 && vm.OptimizeTasks.All(t => t.Status == "Sẵn sàng" && t.Progress == 0));
         vm.OptimizeCommand.Execute(null);
         if (!SpinWait.SpinUntil(() => vm.IsOptimizeRunning && vm.OptimizeStage == OptimizeStage.Applying, TimeSpan.FromSeconds(2)))
@@ -349,23 +495,66 @@ try
             throw new Exception($"Completed state incorrect: finished={vm.OptimizeFinished}, stage={vm.OptimizeStage}, button={vm.OptimizeButtonText}, command={vm.OptimizeCommand.CanExecute(null)}");
         if (!vm.OptimizeTasks.All(t => t.IsSucceeded && t.Progress == 100)) throw new Exception("Optimize task rows did not complete.");
     });
-    Check("Optimize failure identifies the stage and remains retryable", () => {
-        var attempts = 0;
+    Check("Optimize not-confirmed state is distinct from failure", () => {
+        var row = OptimizeTaskCatalog.Defaults()[0];
+        row.State = OptimizeTaskState.NotConfirmed;
+        Assert(row.IsNotConfirmed && !row.IsFailed && !row.IsWaiting && row.Progress == 0);
+        row.State = OptimizeTaskState.Failed;
+        Assert(row.IsFailed && !row.IsNotConfirmed);
+    });
+    Check("Optimize overdue remains visible and retryable after the UI detaches", () => {
+        var removeApps = OptimizeTaskCatalog.Defaults().Single(task => task.Id == "RemoveApps");
         var fake = new FakeOptimizeService(progress => {
+            progress.Report(new(OptimizeStage.Applying, "apply"));
+            progress.Report(new(OptimizeStage.Applying, "removing", "", new(OptimizeTaskEvent.Start, removeApps.Id, "running")));
+            progress.Report(new(OptimizeStage.Overdue, "Windows is still processing Appx", "", new(OptimizeTaskEvent.Overdue, removeApps.Id, "still active")));
+            return Task.FromResult(new OptimizeResult(false, "Windows is still processing Appx.", ""));
+        });
+        var vm = new MainViewModel(false, developerEdition: true, optimizeService: fake) { Page = 1 };
+        vm.OptimizeCommand.Execute(null);
+        if (!SpinWait.SpinUntil(() => !vm.IsBusy, TimeSpan.FromSeconds(2))) throw new Exception("Overdue UI fixture timed out.");
+        var row = vm.OptimizeTasks.Single(task => task.Id == "RemoveApps");
+        Assert(vm.OptimizeStage == OptimizeStage.Overdue && !vm.OptimizeFinished && vm.OptimizeCommand.CanExecute(null));
+        Assert(row.IsOverdue && !row.IsFailed && row.Progress == 0 && row.Status == "still active");
+        Assert(vm.OptimizeSummary.Contains("Quá hạn 1") && vm.OptimizeSummary.Contains("Chưa chạy 16"));
+    });
+    Check("Optimize failure preserves partial progress and retry resets order and log", () => {
+        var attempts = 0;
+        var retryRelease = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var oldLog = Path.Combine(root, "old-optimize-log"); Directory.CreateDirectory(oldLog);
+        var fake = new FakeOptimizeService(async progress => {
             attempts++;
             progress.Report(new(OptimizeStage.Preparing, "prepare"));
-            return Task.FromResult(new OptimizeResult(false, "Không thể giải nén ở bước chuẩn bị.", ""));
+            if (attempts == 1)
+            {
+                progress.Report(new(OptimizeStage.Ready, "", oldLog));
+                var first = OptimizeTaskCatalog.Defaults()[0];
+                progress.Report(new(OptimizeStage.Applying, "apply", "", new(OptimizeTaskEvent.Start, first.Id, "running")));
+                progress.Report(new(OptimizeStage.Applying, "done", "", new(OptimizeTaskEvent.Done, first.Id, "done")));
+                return new OptimizeResult(false, "Không thể hoàn tất một phần.", oldLog);
+            }
+            await retryRelease.Task;
+            return new OptimizeResult(false, "Không thể giải nén ở bước chuẩn bị.", "");
         });
-        var vm = new MainViewModel(false, developerEdition: false, optimizeService: fake) { Page = 1 };
+        var vm = new MainViewModel(false, developerEdition: true, optimizeService: fake) { Page = 1 };
         vm.OptimizeCommand.Execute(null);
         if (!SpinWait.SpinUntil(() => !vm.IsBusy && attempts == 1, TimeSpan.FromSeconds(2)))
             throw new Exception($"First failure run timed out: attempts={attempts}, busy={vm.IsBusy}, stage={vm.OptimizeStage}");
-        if (vm.OptimizeFinished || vm.OptimizeStage != OptimizeStage.Error || !vm.OptimizeSummary.Contains("chuẩn bị") || !vm.OptimizeCommand.CanExecute(null))
+        if (vm.OptimizeFinished || vm.OptimizeStage != OptimizeStage.Error || vm.OptimizeOverall <= 0 || vm.OptimizeOverall >= 100 ||
+            !vm.OptimizeSummary.Contains("Thành công 1") || !vm.OptimizeSummary.Contains("Chưa chạy 16") || !vm.HasOptimizeLog || !vm.OptimizeCommand.CanExecute(null))
             throw new Exception($"Unexpected retry state: finished={vm.OptimizeFinished}, stage={vm.OptimizeStage}, busy={vm.IsBusy}, command={vm.OptimizeCommand.CanExecute(null)}, summary={vm.OptimizeSummary}");
         vm.OptimizeCommand.Execute(null);
-        if (!SpinWait.SpinUntil(() => attempts == 2 && vm.OptimizeStage == OptimizeStage.Error && !vm.IsBusy, TimeSpan.FromSeconds(2)))
+        if (!SpinWait.SpinUntil(() => attempts == 2 && vm.IsBusy, TimeSpan.FromSeconds(2)))
+            throw new Exception($"Retry did not start: attempts={attempts}, busy={vm.IsBusy}, stage={vm.OptimizeStage}");
+        Assert(!vm.HasOptimizeLog && vm.OptimizeLogDirectory.Length == 0 && vm.OptimizeOverall == 0);
+        Assert(vm.OptimizeTasks.Select(task => task.Id).SequenceEqual(OptimizeTaskCatalog.Defaults().Select(task => task.Id)));
+        Assert(vm.OptimizeTasks.All(task => task.State == OptimizeTaskState.Waiting && task.Progress == 0));
+        retryRelease.SetResult(null);
+        if (!SpinWait.SpinUntil(() => vm.OptimizeStage == OptimizeStage.Error && !vm.IsBusy, TimeSpan.FromSeconds(2)))
             throw new Exception($"Retry timed out: attempts={attempts}, busy={vm.IsBusy}, stage={vm.OptimizeStage}");
+        Assert(vm.OptimizeOverall == 0 && vm.OptimizeSummary.Contains("Thành công 0") && vm.OptimizeSummary.Contains("Chưa chạy 17"));
     });
+#endif
     Check("Windows summary handles partial failures and cancellation", () => {
         var failed = new WindowsProgressTracker(3);
         Assert(failed.Update("a", "Đang áp dụng", false, false) == "Đang áp dụng · 1/3");
@@ -506,6 +695,44 @@ try
         service.RunAsync(Catalog.Defaults().Take(1).ToArray(), [], Path.Combine(root, "skip"), new InlineProgress<DeploymentEvent>(_ => { }), new InlineProgress<string>(_ => { }), default).GetAwaiter().GetResult();
         Assert(handler.Calls == 0);
     });
+#if NET48
+    Check("Unknown Smart Skip evidence never installs over an unverified app", () =>
+    {
+        var handler = new FakeHttp();
+        using var client = new System.Net.Http.HttpClient(handler);
+        var outcomes = new List<DeploymentEvent>(); var launches = 0; var reads = 0;
+        var service = new DeploymentService(client, (_, _, _) => { launches++; return Task.FromResult(0); },
+            loadInstalledSoftware: () => { reads++; var snapshot = new InstalledSoftwareSnapshot(); snapshot.ReadErrors.Add("fixture access denied"); return snapshot; });
+        service.RunAsync(Catalog.Defaults().Take(1).ToArray(), [], Path.Combine(root, "unknown-skip"),
+            new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(_ => { }), default).GetAwaiter().GetResult();
+        Assert(reads == 1 && handler.Calls == 0 && launches == 0);
+        Assert(outcomes.Any(item => item.Status == "Không xác minh được · không cài" && item.Finished && item.Failed));
+    });
+    Check("Smart Skip checks again before launching a downloaded installer", () =>
+    {
+        var handler = new FakeHttp();
+        using var client = new System.Net.Http.HttpClient(handler);
+        var outcomes = new List<DeploymentEvent>(); var launches = 0; var reads = 0;
+        var service = new DeploymentService(client, (_, _, _) => { launches++; return Task.FromResult(0); },
+            loadInstalledSoftware: () => {
+                var snapshot = new InstalledSoftwareSnapshot();
+                if (Interlocked.Increment(ref reads) == 2)
+                    snapshot.Entries.Add(new("Google Chrome", "152.0", "Google LLC", "", "fixture"));
+                return snapshot;
+            });
+        service.RunAsync(Catalog.Defaults().Where(app => app.Id == "chrome").ToArray(), [], Path.Combine(root, "race-skip"),
+            new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(_ => { }), default).GetAwaiter().GetResult();
+        Assert(reads == 2 && handler.Calls == 1 && launches == 0);
+        Assert(outcomes.Any(item => item.Status == "Đã cài trong lúc chờ · bỏ qua" && item.Finished && !item.Failed));
+    });
+    Check("A reused built-in ID cannot silently use the old product detector", () =>
+    {
+        var changed = new AppDefinition { Id = "chrome", Name = "Chromium", Url = "https://example.com/chromium.exe" };
+        var snapshot = new InstalledSoftwareSnapshot();
+        snapshot.Entries.Add(new("Google Chrome", "152.0", "Google LLC", "", "fixture"));
+        Assert(InstalledSoftwareDetector.Detect(changed, snapshot).State == SoftwareDetectionState.Unknown);
+    });
+#endif
 }
 finally { Directory.Delete(root, true); }
 Console.WriteLine($"{passed} tests passed. No installers or system configuration were executed.");
@@ -570,6 +797,17 @@ var renderThread = new Thread(() =>
             var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder(); encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
             using var output = File.Create(Path.Combine(targetDir, name)); encoder.Save(output);
         }
+        bool HasVisualText(System.Windows.DependencyObject root, string text)
+        {
+            for (var index = 0; index < System.Windows.Media.VisualTreeHelper.GetChildrenCount(root); index++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(root, index);
+                if (child is System.Windows.Controls.TextBlock block && block.Text == text) return true;
+                if (HasVisualText(child, text)) return true;
+            }
+            return false;
+        }
+#if NET48
         vm.Page = 1;
         vm.OptimizeCommand.Execute(null);
         var optimizeFrame = new System.Windows.Threading.DispatcherFrame();
@@ -577,16 +815,17 @@ var renderThread = new Thread(() =>
         var optimizeTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
         optimizeTimer.Tick += (_, _) =>
         {
-            if (vm.OptimizeTasks.Any(task => task.IsRunning) && vm.OptimizeTasks.Any(task => task.IsSucceeded) || DateTime.UtcNow >= optimizeDeadline) optimizeFrame.Continue = false;
+            if (vm.OptimizeTasks.Any(task => task.IsRunning) && vm.OptimizeTasks.Count(task => task.IsSucceeded) >= 2 || DateTime.UtcNow >= optimizeDeadline) optimizeFrame.Continue = false;
         };
         optimizeTimer.Start(); System.Windows.Threading.Dispatcher.PushFrame(optimizeFrame); optimizeTimer.Stop();
         if (!vm.IsOptimizeRunning || vm.OptimizeStage != OptimizeStage.Applying || !vm.OptimizeIndeterminate || vm.ShowInstallCancel)
             throw new Exception("Optimize preview did not expose the Applying UI state.");
         var optimizeList = (System.Windows.Controls.ItemsControl)window.FindName("OptimizeTaskList");
         var movedTask = vm.OptimizeTasks[vm.OptimizeTasks.Count - 1];
-        var movedContainer = (System.Windows.FrameworkElement?)optimizeList.ItemContainerGenerator.ContainerFromItem(movedTask);
-        if (!movedTask.IsSucceeded || movedContainer?.RenderTransform is not System.Windows.Media.TranslateTransform movedTransform || !movedTransform.HasAnimatedProperties)
-            throw new Exception("The completed Optimize row was not animated when it moved to the bottom.");
+        if (!movedTask.IsSucceeded || !HasVisualText(optimizeList, "Debloatware") || !HasVisualText(optimizeList, "Optimize Windows") ||
+            vm.OptimizeTaskGroups.Groups?[0] is not System.Windows.Data.CollectionViewGroup debloatGroup || debloatGroup.Name?.ToString() != "Debloatware" ||
+            vm.OptimizeTaskGroups.Groups?[1] is not System.Windows.Data.CollectionViewGroup windowsGroup || windowsGroup.Name?.ToString() != "Optimize Windows")
+            throw new Exception("The two Optimize task sections were not rendered in the expected order.");
         Capture("optimize-applying.png");
         var optimizeCompletionFrame = new System.Windows.Threading.DispatcherFrame();
         var optimizeCompletionTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
@@ -599,6 +838,7 @@ var renderThread = new Thread(() =>
             throw new Exception("Optimize preview completion UI is incorrect.");
         Capture("optimize-completed.png");
         Console.WriteLine("PASS WPF Optimize lifecycle and render");
+#endif
         vm.Page = 3; vm.SettingsTab = 1;
         Capture("settings-windows.png");
         var originalAction = vm.SelectedWindows!.Action;
@@ -661,12 +901,22 @@ var renderThread = new Thread(() =>
         var publicWindow = new MiniApps.MainWindow(publicVm) { ShowInTaskbar = false, Left = -20000, Top = -20000 };
         publicWindow.Show(); publicWindow.UpdateLayout();
         var navigation = (System.Windows.Controls.ListBox)publicWindow.FindName("NavigationList");
-        if (navigation.Items.Count != 4 || ((System.Windows.Controls.ListBoxItem)navigation.Items[3]).Visibility != System.Windows.Visibility.Collapsed)
-            throw new Exception("Public navigation must hide Setting.");
+        if (navigation.Items.Count != 4 ||
+            !string.Equals(((System.Windows.Controls.ListBoxItem)navigation.Items[0]).Content?.ToString(), "Install Software", StringComparison.Ordinal) ||
+            ((System.Windows.Controls.ListBoxItem)navigation.Items[0]).Visibility != System.Windows.Visibility.Visible ||
+            ((System.Windows.Controls.ListBoxItem)navigation.Items[1]).Visibility != System.Windows.Visibility.Collapsed ||
+            ((System.Windows.Controls.ListBoxItem)navigation.Items[2]).Visibility != System.Windows.Visibility.Visible ||
+            ((System.Windows.Controls.ListBoxItem)navigation.Items[3]).Visibility != System.Windows.Visibility.Collapsed)
+            throw new Exception("Public navigation must expose only Install Software and Driver.");
+        publicVm.Page = 1;
+        if (publicVm.Page != 0 || publicVm.IsOptimize || publicVm.OptimizeCommand.CanExecute(null))
+            throw new Exception("Public navigation reached Optimize.");
+        publicVm.Page = 2;
+        if (publicVm.Page != 2 || !publicVm.IsDriver) throw new Exception("Public navigation could not reach Driver.");
         publicVm.Page = 3;
-        if (publicVm.Page != 0 || publicVm.IsSetting) throw new Exception("Public navigation reached Setting.");
+        if (publicVm.Page != 2 || publicVm.IsSetting) throw new Exception("Public navigation reached Setting.");
         publicWindow.Close();
-        Console.WriteLine("PASS Public WPF navigation hides and blocks Setting");
+        Console.WriteLine("PASS Public WPF navigation exposes only Install Software and Driver");
         application.Shutdown();
     }
     catch (Exception ex) { renderError = ex; }

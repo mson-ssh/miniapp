@@ -14,16 +14,29 @@ public sealed class DeploymentService
     private static readonly HttpClient DefaultHttp = CreateDefaultHttpClient();
     private readonly HttpClient http;
     private readonly Func<string, string, IProgress<string>, Task<int>> run;
-    private readonly Func<AppDefinition, bool> installed;
+    private readonly Func<AppDefinition, bool>? installedOverride;
+#if NET48
+    private readonly Func<InstalledSoftwareSnapshot> loadInstalledSoftware;
+    private readonly Func<AppDefinition, InstalledSoftwareSnapshot, SoftwareDetectionResult> detectInstalledSoftware;
+#endif
     private readonly Func<TimeSpan, CancellationToken, Task> delay;
     private readonly Func<int> getWindowsBuild;
     public DeploymentService(HttpClient? http = null, Func<string, string, IProgress<string>, Task<int>>? run = null,
         Func<AppDefinition, bool>? installed = null, Func<TimeSpan, CancellationToken, Task>? delay = null,
-        Func<int>? getWindowsBuild = null)
+        Func<int>? getWindowsBuild = null
+#if NET48
+        , Func<InstalledSoftwareSnapshot>? loadInstalledSoftware = null,
+        Func<AppDefinition, InstalledSoftwareSnapshot, SoftwareDetectionResult>? detectInstalledSoftware = null
+#endif
+        )
     {
         this.http = http ?? DefaultHttp;
         this.run = run ?? RunPowerShellAsync;
-        this.installed = installed ?? IsInstalled;
+        installedOverride = installed;
+#if NET48
+        this.loadInstalledSoftware = loadInstalledSoftware ?? InstalledSoftwareDetector.Capture;
+        this.detectInstalledSoftware = detectInstalledSoftware ?? InstalledSoftwareDetector.Detect;
+#endif
         this.delay = delay ?? Task.Delay;
         this.getWindowsBuild = getWindowsBuild ?? (() => WindowsCompatibility.CurrentBuild);
     }
@@ -43,16 +56,61 @@ public sealed class DeploymentService
         Directory.CreateDirectory(workDir);
         var windowsBuild = options.Count == 0 ? WindowsCompatibility.MinimumWindowsBuild : getWindowsBuild();
         using var msiInstallSlot = new SemaphoreSlim(1);
+#if NET48
+        Task<InstalledSoftwareSnapshot?> snapshotTask = installedOverride == null
+            ? Task.Run<InstalledSoftwareSnapshot?>(() => loadInstalledSoftware(), token)
+            : Task.FromResult<InstalledSoftwareSnapshot?>(null);
+        var launchSnapshot = new Lazy<Task<InstalledSoftwareSnapshot>>(
+            () => Task.Run(loadInstalledSoftware, token), LazyThreadSafetyMode.ExecutionAndPublication);
+        var decisionLogLock = new object();
+        var decisionLogPath = installedOverride == null ? CreateSmartSkipLogPath() : "";
+#endif
         var appTasks = apps.Select(async app =>
         {
             try
             {
                 token.ThrowIfCancellationRequested();
-                if (await Task.Run(() => installed(app), token)) { events.Report(new(app.Id, "Đã cài · bỏ qua", 100, true)); return; }
+                events.Report(new(app.Id, "Đang kiểm tra"));
+#if NET48
+                var firstDetection = installedOverride != null
+                    ? new SoftwareDetectionResult(installedOverride(app) ? SoftwareDetectionState.Installed : SoftwareDetectionState.NotInstalled,
+                        "Kết quả từ bộ nhận diện được truyền vào.")
+                    : detectInstalledSoftware(app, (await snapshotTask)!);
+                ReportDetection(app, firstDetection, "trước tải");
+                if (firstDetection.State == SoftwareDetectionState.Installed)
+                {
+                    events.Report(new(app.Id, "Đã cài · bỏ qua", 100, true));
+                    return;
+                }
+                if (firstDetection.State == SoftwareDetectionState.Unknown)
+                {
+                    events.Report(new(app.Id, "Không xác minh được · không cài", 0, true, true));
+                    return;
+                }
+#else
+                if (await Task.Run(() => (installedOverride ?? IsInstalled)(app), token)) { events.Report(new(app.Id, "Đã cài · bỏ qua", 100, true)); return; }
+#endif
                 events.Report(new(app.Id, "Chờ tải"));
                 var path = await DownloadAsync(app, workDir, events, log, token);
                 events.Report(new(app.Id, "Chờ cài đặt", 100));
                 token.ThrowIfCancellationRequested();
+#if NET48
+                var launchDetection = installedOverride != null
+                    ? new SoftwareDetectionResult(installedOverride(app) ? SoftwareDetectionState.Installed : SoftwareDetectionState.NotInstalled,
+                        "Kết quả từ bộ nhận diện được truyền vào.")
+                    : detectInstalledSoftware(app, await launchSnapshot.Value);
+                ReportDetection(app, launchDetection, "trước chạy bộ cài");
+                if (launchDetection.State == SoftwareDetectionState.Installed)
+                {
+                    events.Report(new(app.Id, "Đã cài trong lúc chờ · bỏ qua", 100, true));
+                    return;
+                }
+                if (launchDetection.State == SoftwareDetectionState.Unknown)
+                {
+                    events.Report(new(app.Id, "Không xác minh được · không cài", 0, true, true));
+                    return;
+                }
+#endif
                 var isMsi = Path.GetExtension(path).Equals(".msi", StringComparison.OrdinalIgnoreCase);
                 var file = isMsi ? Path.Combine(Environment.SystemDirectory, "msiexec.exe") : path;
                 var args = isMsi ? $"/i \"{path}\" {app.Arguments}" : app.Arguments;
@@ -122,7 +180,36 @@ public sealed class DeploymentService
             catch (Exception ex) { log.Report($"Windows/{option.Name}: {ex.Message}"); events.Report(new(option.TaskId, "Thất bại", 0, true, true)); }
         }).ToArray();
         await Task.WhenAll(appTasks.Concat(settingTasks));
+
+#if NET48
+        void ReportDetection(AppDefinition app, SoftwareDetectionResult result, string phase)
+        {
+            var evidence = string.IsNullOrWhiteSpace(result.Evidence) ? "" : $" Bằng chứng: {result.Evidence}.";
+            var line = $"Smart Skip/{app.Id} ({phase}): {result.State}. {result.Reason}{evidence}";
+            log.Report(line);
+            if (decisionLogPath.Length == 0) return;
+            try
+            {
+                lock (decisionLogLock)
+                    File.AppendAllText(decisionLogPath, $"[{DateTimeOffset.Now:O}] {line}{Environment.NewLine}", new UTF8Encoding(false));
+            }
+            catch { }
+        }
+#endif
     }
+
+#if NET48
+    private static string CreateSmartSkipLogPath()
+    {
+        try
+        {
+            var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MiniApps", "InstallLogs");
+            Directory.CreateDirectory(directory);
+            return Path.Combine(directory, $"smart-skip-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.log");
+        }
+        catch { return ""; }
+    }
+#endif
 
     private async Task<string> DownloadAsync(AppDefinition app, string workDir, IProgress<DeploymentEvent> events, IProgress<string> log, CancellationToken token)
     {
@@ -211,6 +298,9 @@ public sealed class DeploymentService
 
     public static bool IsInstalled(AppDefinition app)
     {
+#if NET48
+        return InstalledSoftwareDetector.Detect(app, InstalledSoftwareDetector.Capture()).State == SoftwareDetectionState.Installed;
+#else
         if (app.Id == "evkey" && (File.Exists(@"C:\EVKey\EVKey64.exe") || File.Exists(@"C:\EVKey\EVKey.exe"))) return true;
         if (app.Id == "zalo" && File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Zalo", "Zalo.exe"))) return true;
         if (app.Id == "telegram" && File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Telegram Desktop", "Telegram.exe"))) return true;
@@ -227,10 +317,14 @@ public sealed class DeploymentService
             }
         }
         return false;
+#endif
     }
 
     internal static bool InstalledNameMatches(AppDefinition app, string displayName)
     {
+#if NET48
+        return InstalledSoftwareDetector.InstalledNameMatches(app, displayName);
+#else
         var pattern = app.Id.ToLowerInvariant() switch
         {
             "evkey" => @"^EVKey(?:\s|$)",
@@ -241,18 +335,23 @@ public sealed class DeploymentService
             "winrar" => @"^WinRAR(?:\s|$)",
             "zalo" => @"^Zalo(?:\s|$)",
             "zoom" => @"^Zoom(?: Workplace)?(?:\s|$)",
-            "office" => @"^Microsoft (?:Office|365)(?:\s|$)",
+            "office" => @"^Microsoft Office(?:\s+LTSC)?\s+.*\b2024\b",
             "wps" => @"^WPS Office(?:\s|$)",
-            "vc64" => @"^Microsoft Visual C\+\+.*\bx64\b",
-            "vc86" => @"^Microsoft Visual C\+\+.*\bx86\b",
+            "vc64" => @"^Microsoft Visual C\+\+ 2015-2022 Redistributable \(x64\)",
+            "vc86" => @"^Microsoft Visual C\+\+ 2015-2022 Redistributable \(x86\)",
             // Custom entries use a conservative name rule: exact name, a numeric version, or architecture/details in parentheses.
             // This avoids treating related products such as "Zoom Outlook Plugin" as the main application.
             _ => "^" + Regex.Escape(app.Name.Trim()) + @"(?:$|\s+(?:v(?:ersion)?\s*)?\d|\s*\()"
         };
         return app.Name.Trim().Length > 0 && Regex.IsMatch(displayName, pattern, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(200));
+#endif
     }
 
     internal static async Task<int> RunPowerShellAsync(string command, string workDir, IProgress<string> log)
+        => await RunPowerShellAsync(command, workDir, log,
+            "Tác vụ đã chạy hơn 30 phút. Tiếp tục chờ để không làm gián đoạn tiến trình đang hoạt động.");
+
+    internal static async Task<int> RunPowerShellAsync(string command, string workDir, IProgress<string> log, string prolongedMessage)
     {
         var wrapper = "$ErrorActionPreference='Stop'; try { " + command + " } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }";
         var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe"))
@@ -272,7 +371,7 @@ public sealed class DeploymentService
         var error = ReadAsync(process.StandardError);
         var exit = ProcessCompatibility.WaitForExitAsync(process);
         if (await Task.WhenAny(exit, Task.Delay(TimeSpan.FromMinutes(30))) != exit)
-            log.Report("Tác vụ đã chạy hơn 30 phút. Tiếp tục chờ để không làm hỏng cài đặt; chưa được đóng ứng dụng.");
+            log.Report(prolongedMessage);
         await exit;
         await Task.WhenAll(output, error);
         return process.ExitCode;

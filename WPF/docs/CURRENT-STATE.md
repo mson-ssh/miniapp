@@ -1,5 +1,39 @@
 # Trạng thái bàn giao
 
+## Phạm vi giao diện Public — local net48 và net10
+
+Public nay chỉ hiển thị hai thẻ **Install Software** và **Driver**. Điều hướng lẫn lệnh của Optimize Windows và Setting đều bị chặn trong ViewModel, kể cả khi cố gán trang trực tiếp; Developer vẫn có đủ bốn thẻ. Build sạch 0 warning/0 error trên cả hai target; net48 đạt 71 logic tests và 6 WPF checks, net10 đạt 53 logic tests và 5 WPF checks. Hai output Public trong `artifacts/public-nav-review-20260908-094220` đều xác thực cấu hình với mã 0; Public net48 smoke test mở/đóng mã 0 và preview thật đã được mở để người dùng kiểm tra. Developer net48 cũng đã được build/mở bằng `Run-Developer.ps1`. Không chạy cài đặt, Optimize hoặc Windows Setting thật; chưa commit/push/phát hành.
+
+## Smart Skip Install Software — local net48
+
+Install net48 đã chuyển sang detector ba trạng thái `Installed`, `NotInstalled`, `Unknown`. Mỗi lượt đọc inventory Registry một lần cho bước trước tải và một lần dùng chung trước khi launch; quyết định từng app có lý do/bằng chứng trong `%LocalAppData%\MiniApps\InstallLogs`. Unknown không tải hoặc chạy installer và được tính là lỗi để người dùng có thể thử lại. Matcher đã bao phủ đủ 12 app mặc định; Zoom Outlook Plugin, Chrome Beta, WPS updater và K-Lite helper không còn được nhận nhầm là app chính. ID built-in bị đổi sang tên sản phẩm khác không âm thầm dùng rule cũ.
+
+Kiểm tra read-only trên máy phát triển xác nhận Office `HomeStudent2021Retail`, Visual C++ v14.51 x64 và x86 đều là Installed; EVKey, Chrome, K-Lite, Telegram, UltraViewer, WinRAR, Zalo và Zoom cũng được nhận đúng; WPS là NotInstalled; không có lỗi đọc inventory. Build net48 sạch 0 warning/0 error; 71 logic tests và 6 WPF checks đạt. Không chạy bộ cài hay Windows Setting thật; net10 chưa build/test; chưa commit/push/phát hành.
+
+## Sửa lỗi chờ kéo dài và protocol Optimize — local net48
+
+Helper hai lane nay dùng `System.Diagnostics.Process` và đọc stdout/stderr theo dòng hoàn chỉnh bằng `ReadLineAsync`. Mã thoát thật của từng lane được giữ nguyên; protocol bị ghi thành nhiều nhịp và đoạn cuối không có newline không còn bị mất hoặc phát sớm. Nếu lane sau không khởi động được, mọi lane đã khởi động vẫn được drain và chờ kết thúc trước khi trả lỗi. Lane Features gọi `-RunDefaults`, sau đó chỉ tách `RemoveApps/Apps`, nên tiếp tục dùng lọc `MinVersion`, `MaxVersion` và Modern Standby của upstream.
+
+WinGet trong chế độ MiniApps đã chuyển khỏi runspace `Stop()` sang worker OS process riêng. Worker dùng chung mutex package với Appx, ghi JSON/log và có deadline 120 giây; quá hạn được báo `OVERDUE`, worker không bị kill và Install/Optimize mới bị chặn cho tới khi mutex được nhả. Nhận diện cài sẵn Office nay yêu cầu Office 2024; VC++ yêu cầu đúng dòng 2015–2022 và kiến trúc, tránh bỏ qua bộ cài vì một phiên bản cũ hoặc Microsoft 365 khác đang tồn tại. Phạm vi nhóm giao diện mới được giữ ở net48; net10 chưa build/test.
+
+Đã xác minh: build net48 sạch 0 warning/0 error; 65 logic tests và 6 WPF checks; bundle từ output đạt 74 kiểm tra; fixture parallel, archive, Appx worker, WinGet worker, timeout và bridge đều đạt. Tất cả fixture đều không chạy Optimize/cài đặt hoặc thay đổi cấu hình Windows thật. Chưa push/phát hành; chưa chạy Optimize thật sau sửa.
+
+## MiniApps Debloat Windows 11 — bản viết lại tích hợp local
+
+Optimize net48 nay chạy `RemoveApps` và 16 tính năng cùng lúc trong hai engine lane của một lượt. Giao diện chia thành **Debloatware** (gỡ phần mềm) và **Optimize Windows** (tùy chỉnh/tắt tính năng), nhưng vẫn dùng một nút chạy chung. Lane Features chịu trách nhiệm Registry backup; lane RemoveApps không tạo backup trùng. Output được hợp nhất thành 17 tác vụ và diagnostics giữ hai PID engine. Các thao tác Appx phụ trong cả hai lane vẫn dùng chung mutex, nên chỉnh Registry/Windows chạy song song nhưng App Repository chỉ có một writer. Build net48 sạch; 65 logic tests, 6 WPF checks, 67 kiểm tra bundle, fixture hai lane, timeout, Appx worker, bridge và bootstrap đều đạt. Đây là thay đổi local, chưa chạy Optimize thật sau sửa, chưa push/phát hành.
+
+## Optimize local — rà soát 3 tầng
+
+Tầng 1 đã triển khai và xác nhận cho net48: bản sao engine ghi Registry backup trực tiếp vào `%LocalAppData%\MiniApps\OptimizeLogs\<lượt>\Backups`; runtime ghi PID runner/engine/Appx worker, timestamps, stage, exit code và số mục thành công/bỏ qua/lỗi/quá hạn/chưa chạy. Build net48 sạch 0 cảnh báo/0 lỗi; 64 logic tests, 6 kiểm tra WPF và 60 kiểm tra bundle từ output đạt. Fixture monitor xác nhận không kill worker, fixture Appx pattern không khớp xác nhận JSON/mutex, fixture bridge giữ `OVERDUE`, và bootstrap đều đạt. Các fixture không gỡ ứng dụng hoặc đổi thiết lập Windows. Bản sửa mới chưa được chạy Optimize thật; bằng chứng nguyên nhân đến từ lượt người dùng chạy trước khi sửa tại log `20260907-141430-db784a9ebe2f41cf854702e18143b841`.
+
+Tầng 2 đã đạt trên output Public net48 mới `artifacts/review3-public-clean-net48-20260907-111506`: package/resource và helper Optimize đạt 46 kiểm tra; cấu hình đóng gói được xác thực với mã 0; bản Public đủ 365 tệp được sao chép vào đường dẫn lồng kiểu phiên `irm`, mở cửa sổ WPF thật bằng cờ smoke an toàn rồi tự đóng sau sự kiện Loaded với mã 0 và không để lại tiến trình. Manifest Admin được xác nhận qua UAC; bản Developer thật đã mở từ output riêng của `Run-Developer.ps1`. Tầng 3 vẫn chờ người dùng bấm Optimize trên máy kiểm thử và cung cấp thư mục log của lượt chạy; AI không tự chạy thay đổi hệ thống.
+
+## Quy trình local — Developer thật
+
+Theo yêu cầu người dùng, sau thay đổi sẽ build/mở bản Developer net48 thật bằng `Run-Developer.ps1`, không dùng Developer preview làm bước chạy mặc định. Script tạo output riêng, khởi tạo/đọc `ReleaseConfig` rồi mở MiniApps không có cờ preview. Các nút Install và Optimize vì vậy có thể chạy thật; AI chỉ mở ứng dụng, người dùng trực tiếp quyết định thao tác. `Preview.ps1` được giữ cho kiểm thử mô phỏng. Chưa push thay đổi quy trình này.
+
+MiniApps local hiện yêu cầu quyền Administrator ngay khi khởi động qua application manifest `requireAdministrator`; Windows hiển thị UAC cho cả Developer và Public. Thay đổi quyền này mới ở local, chưa push/phát hành.
+
 ## Phát hành v0.3.5 — 2026-09-07
 
 Đã phát hành theo yêu cầu test máy khách. Source release: `065fb8af489dae37a00348f5fc0acb2fe7e68adf`. ZIP net48: 859705 bytes, SHA-256 `52a57a5c5ad74a91e2e4c454d7f23c06d7ff643e3cf255afb9e22672abb3e49f`. Đã xác minh digest/size hai ZIP trên GitHub, tải lại net48 kiểm tra hash và 37 điều kiện của engine/assembly. Bootstrap chuyển sang v0.3.5 sau khi asset được xác minh. Máy khách trước đó xác nhận v0.3.4 thoát mã 2 vì WPF tìm `app\mainwindow.xaml`. Nguyên nhân là cây Win11Debloat đã được khai báo thành MSBuild `Content`; `Schemas\MainWindow.xaml` của upstream sinh `AssemblyAssociatedContentFileAttribute("mainwindow.xaml")` và che resource giao diện đã biên dịch của MiniApps. Bản sửa net48 chuyển cây vendor sang `None` có copy-to-output, nên XAML upstream vẫn có tại `Engine\Debloat\Schemas` dưới dạng dữ liệu nhưng không còn metadata WPF. Assembly Public đã kiểm tra không đăng ký external `mainwindow.xaml`, đồng thời vẫn có `MiniApps.g.resources/mainwindow.baml`.
@@ -42,9 +76,9 @@ Cập nhật: 2026-09-06. Đây là snapshot; kiểm tra Git và code khi tiếp
 
 ## Đã làm và đã kiểm tra
 
-Điều chỉnh giao diện mới nhất: hàng Optimize dạng thẻ thông báo gọn, bỏ toàn bộ vòng tròn/dấu tích trạng thái; dùng chữ trạng thái và nền dịu, giữ hoạt ảnh chuyển hàng 220 ms. Không thay đổi engine thực thi.
+Điều chỉnh giao diện mới nhất: hàng Optimize dạng thẻ thông báo gọn, chia rõ Debloatware và Optimize Windows, dùng chữ trạng thái cùng nền dịu.
 
-Install một nút, tiến trình ba cột, Windows Setting mở rộng, tự nhận diện app đã cài; nút khóa sau lượt hoàn tất. Setting chỉ Developer, hai nhóm CRUD cấu hình. Driver đọc thông tin và dẫn URL hãng. Optimize net48 có danh sách 17 tác vụ tuần tự lấy trạng thái thật từ upstream: tác vụ đang chạy đứng đầu, tác vụ chờ theo sau, tác vụ hoàn tất trượt xuống cuối trong 220 ms; DONE/SKIP/ERROR và trường hợp thiếu kết quả được giữ đúng nghĩa. Giao diện không hiển thị restore point hoặc backup Registry, nhưng engine vẫn bỏ restore point và bảo toàn backup như trước. Thành công khóa nút trong phiên; lỗi cho thử lại. Developer preview mô phỏng đúng vòng đời và không thay đổi hệ thống.
+Install một nút, tiến trình ba cột, Windows Setting mở rộng, tự nhận diện app đã cài; nút khóa sau lượt hoàn tất. Setting chỉ Developer, hai nhóm CRUD cấu hình. Driver đọc thông tin và dẫn URL hãng. Optimize net48 hiển thị trạng thái thật của 17 tác vụ trong hai vùng; DONE/SKIP/ERROR/OVERDUE và trường hợp thiếu kết quả được giữ đúng nghĩa. Giao diện không hiển thị restore point hoặc backup Registry, nhưng engine vẫn bỏ restore point và bảo toàn backup. Thành công khóa nút trong phiên; lỗi cho thử lại. Developer preview mô phỏng đúng vòng đời và không thay đổi hệ thống.
 
 Lần kiểm tra tính năng gần nhất: build net48 sạch; 59 kiểm thử logic và 6 kiểm tra WPF đều đạt, gồm xác nhận hàng vừa hoàn tất đang có animation khi chuyển xuống cuối. Fixture PowerShell xác minh START/DONE/ERROR/SKIP và bảo toàn giá trị trả về của upstream; script upstream sau khi gắn bridge đã được parse cú pháp, không thực thi. Không build/test net10 hoặc chạy cài đặt/Optimize thật trên máy phát triển.
 
