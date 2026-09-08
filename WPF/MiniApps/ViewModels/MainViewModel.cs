@@ -89,7 +89,15 @@ public sealed class MainViewModel : Observable
     private int settingsTab;
     public int SettingsTab { get => settingsTab; set { if (Set(ref settingsTab, value)) RefreshSettingsState(); } }
     public string Machine => $"{Environment.MachineName}  ·  Windows {WindowsCompatibility.CurrentBuild}  ·  {System.Runtime.InteropServices.RuntimeInformation.OSArchitecture}";
-    public string RuntimeLabel => IsDeveloperEdition ? (preview ? "DEVELOPER · XEM THỬ" : "DEVELOPER · v0.3.0") : (preview ? "PUBLIC · XEM THỬ" : "Windows desktop · v0.3.0");
+    public string RuntimeLabel
+    {
+        get
+        {
+            if (preview) return IsDeveloperEdition ? "DEVELOPER · XEM THỬ" : "PUBLIC · XEM THỬ";
+            var version = typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+            return IsDeveloperEdition ? $"DEVELOPER · v{version}" : $"Windows desktop · v{version}";
+        }
+    }
     private int page;
     public int Page
     {

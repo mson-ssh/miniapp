@@ -42,7 +42,7 @@ public sealed class OptimizeService : IOptimizeService
     private readonly Func<bool> isAdministrator;
     private readonly Func<Mutex> createMutex;
     private readonly Func<Mutex> createWorkerMutex;
-    private readonly string scriptPath;
+    private readonly string enginePath;
     private readonly string tempRoot;
 
     public OptimizeService(
@@ -53,13 +53,13 @@ public sealed class OptimizeService : IOptimizeService
         string? tempRoot = null,
         Func<Mutex>? createWorkerMutex = null)
     {
-        this.runPowerShell = runPowerShell ?? ((command, work, output) => DeploymentService.RunPowerShellAsync(
-            command, work, output,
-            "Optimize đã chạy hơn 30 phút. MiniApps vẫn đang nhận diện tiến trình và tiếp tục chờ; xem runtime-diagnostics.json trong thư mục nhật ký."));
         this.isAdministrator = isAdministrator ?? IsCurrentProcessAdministrator;
         this.createMutex = createMutex ?? (() => new Mutex(false, DeploymentMutexName));
         this.createWorkerMutex = createWorkerMutex ?? (() => new Mutex(false, AppxWorkerMutexName));
-        this.scriptPath = scriptPath ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Scripts", "Optimize-Defaults.ps1");
+        this.enginePath = scriptPath ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "MiniApps.OptimizeEngine.exe");
+        this.runPowerShell = runPowerShell ?? ((arguments, work, output) => DeploymentService.RunExecutableAsync(
+            enginePath, arguments, work, output,
+            "Optimize đã chạy hơn 30 phút. MiniApps vẫn đang nhận diện tiến trình và tiếp tục chờ; xem runtime-diagnostics.json trong thư mục nhật ký."));
         this.tempRoot = tempRoot ?? Path.Combine(Path.GetTempPath(), "MiniApps");
     }
 
@@ -80,8 +80,8 @@ public sealed class OptimizeService : IOptimizeService
                 return new(false, "Một lượt cài đặt hoặc tối ưu khác đang chạy. Hãy chờ hoàn tất.", "");
 
             cancellationToken.ThrowIfCancellationRequested();
-            if (!File.Exists(scriptPath))
-                return new(false, "Thiếu script Optimize của MiniApps.", "");
+            if (!File.Exists(enginePath))
+                return new(false, "Thiếu MiniApps.OptimizeEngine.exe.", "");
 
             // The bootstrap already nests MiniApps under its owned session directory. Keep this
             // leaf unique for direct launches too, but short enough for legacy MAX_PATH APIs.
@@ -160,9 +160,10 @@ public sealed class OptimizeService : IOptimizeService
                     else callerContext.Send(_ => progress.Report(item), null);
                     TryWriteDiagnostics();
                 });
-                var escapedWork = EscapePowerShell(work);
-                var escapedScript = EscapePowerShell(scriptPath);
-                var command = $"Set-Location -LiteralPath '{escapedWork}'; & '{escapedScript}'";
+                var command = ProcessCompatibility.JoinArguments(new[]
+                {
+                    "--run", "--silent", "--caller-holds-deployment-lock", "--work-root", work
+                });
                 var code = await runPowerShell(command, work, output);
                 lock (stateLock) exitCode = code;
                 cancellationToken.ThrowIfCancellationRequested();
@@ -345,8 +346,6 @@ public sealed class OptimizeService : IOptimizeService
         using var identity = WindowsIdentity.GetCurrent();
         return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
     }
-
-    private static string EscapePowerShell(string value) => value.Replace("'", "''");
 
     private static string PowerShellDetail(List<string> lines, object sync)
     {

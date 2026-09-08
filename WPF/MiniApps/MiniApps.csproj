@@ -11,7 +11,7 @@
     <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>MiniApps</AssemblyName>
-    <Version>0.3.6</Version>
+    <Version>0.3.7</Version>
     <MiniAppsEdition Condition="'$(MiniAppsEdition)' == ''">Developer</MiniAppsEdition>
     <DefineConstants Condition="'$(MiniAppsEdition)' == 'Developer'">$(DefineConstants);MINIAPPS_DEVELOPER</DefineConstants>
   </PropertyGroup>
@@ -19,30 +19,16 @@
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
     <PackageReference Include="System.Text.Json" Version="8.0.6" />
     <Reference Include="System.Net.Http" />
-    <!-- Upstream XAML is runtime data for the PowerShell engine. Keeping it as None
-         prevents WPF from emitting AssemblyAssociatedContentFile attributes that can
-         shadow MiniApps' own compiled MainWindow resource. -->
-    <None Include="..\ThirdParty\Win11Debloat\**\*"
-          Link="Engine\Debloat\%(RecursiveDir)%(Filename)%(Extension)"
-          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Scripts\*.ps1" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Scripts\Configure-Windows.ps1;Scripts\Update-Winget.ps1" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Scripts\Update-Winget.ps1;Scripts\Invoke-Debloat.ps1" />
   </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
-    <!-- Kept in source for the historical ZIP fixture only; the bundled engine flow never ships it. -->
-    <Content Remove="Scripts\Expand-OptimizeArchive.ps1" />
-  </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
-    <Content Remove="Scripts\Optimize-Defaults.ps1" />
-    <Content Remove="Scripts\Optimize-TaskBridge.ps1" />
-    <Content Remove="Scripts\Expand-OptimizeArchive.ps1" />
-    <Content Remove="Scripts\Copy-OptimizeEngine.ps1" />
-    <Content Remove="Scripts\Configure-OptimizeEngine.ps1" />
-    <Content Remove="Scripts\Optimize-WorkerMonitor.ps1" />
-    <Content Remove="Scripts\Invoke-MiniAppsAppxWorker.ps1" />
-    <Content Remove="Scripts\Invoke-MiniAppsWingetWorker.ps1" />
-    <Content Remove="Scripts\Optimize-ParallelEngines.ps1" />
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48' and '$(MiniAppsEdition)' == 'Developer'">
+    <ProjectReference Include="..\MiniApps.OptimizeEngine\MiniApps.OptimizeEngine.csproj" ReferenceOutputAssembly="false" />
+    <None Include="..\MiniApps.OptimizeEngine\bin\$(Configuration)\net48\MiniApps.OptimizeEngine.exe"
+          Link="MiniApps.OptimizeEngine.exe"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

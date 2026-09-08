@@ -33,7 +33,9 @@ Hiển thị host, hãng, model và serial; cho phép sao chép serial và mở 
 
 ### Optimize Windows
 
-Chỉ hiển thị trong Developer. Luồng net48 tích hợp source Win11Debloat đã vendor, chia thành **Debloatware** và **Optimize Windows** nhưng chạy chung một lượt. Hai lane có thể chạy đồng thời; các thao tác Appx/WinGet dùng worker và mutex riêng để tránh nhiều writer trên App Repository.
+Chỉ hiển thị trong Developer. Luồng net48 gọi một `MiniApps.OptimizeEngine.exe` chạy silent; EXE này chứa sẵn fork Win11Debloat và các script điều phối nên gói Developer không còn 352 file engine rời. Khi người dùng bấm Optimize, helper xác minh payload rồi giải nén vào thư mục phiên tạm để chạy. Public không đóng gói helper hoặc payload Optimize.
+
+Giao diện chia thành **Debloatware** và **Optimize Windows** nhưng chạy chung một lượt. Hai lane có thể chạy đồng thời; các thao tác Appx/WinGet dùng worker và mutex riêng để tránh nhiều writer trên App Repository.
 
 Mỗi lượt lưu log, diagnostics và Registry backup trong `%LocalAppData%\MiniApps\OptimizeLogs`. Tác vụ quá hạn được báo đúng trạng thái; MiniApps không kill worker hệ thống còn hoạt động.
 

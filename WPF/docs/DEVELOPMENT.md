@@ -18,6 +18,15 @@ Test hiện dùng fake runner/download và WPF mô phỏng, không chạy instal
 & ./Test-Bootstrap.ps1
 ```
 
+Khi sửa Optimize hoặc cách đóng gói engine, chạy thêm:
+
+```powershell
+& ./Test-OptimizeEngineExecutable.ps1
+& ./Test-OptimizeBundledEngine.ps1 -PublishedPath <output-developer-net48> -PublicPath <output-public-net48>
+```
+
+Fixture thứ nhất build helper, xác minh EXE độc lập, payload xác định và không giải nén file cạnh EXE. Fixture thứ hai kiểm tra Developer chỉ có helper, Public không có payload Optimize và resource WPF không bị xung đột. Hai fixture không chạy `--run` và không thay đổi Windows.
+
 Gói Public net48 có cờ nội bộ `--startup-smoke-test`: cờ này vẫn tạo cửa sổ WPF thật rồi tự đóng sau sự kiện Loaded, trả mã 0 nếu khởi động thành công. Kết hợp với `--preview` khi kiểm tra output để bảo đảm không có tác vụ thật được chạy.
 
 Mở bản Developer thật sau khi sửa tính năng:
@@ -34,7 +43,7 @@ Sau khi người dùng trực tiếp bấm Optimize, ghi nhận trạng thái cu
 
 ## Mang theo và bỏ qua
 
-Mang theo source `MiniApps/`, `MiniApps.Tests/`, `ReleaseConfig/`, các script/thông tin build, `AGENTS.md`, `docs/` và README. Có thể clone repo để lấy các file đã commit. Tài liệu chưa push phải sao chép riêng nếu đổi máy ngay.
+Mang theo source `MiniApps/`, `MiniApps.OptimizeEngine/`, `MiniApps.Tests/`, `ThirdParty/Win11Debloat/`, `ReleaseConfig/`, các script/thông tin build, `AGENTS.md`, `docs/` và README. Có thể clone repo để lấy các file đã commit. Tài liệu chưa push phải sao chép riêng nếu đổi máy ngay.
 
 Không cần mang `bin/`, `obj/`, `artifacts/`, checkout tạm, NuGet cache hoặc token đăng nhập. Restore/build lại trên máy mới. Đường dẫn `F:\Project\scr-miniaz` và SDK dưới LocalAppData là đặc thù máy cũ, không phải yêu cầu của dự án.
 

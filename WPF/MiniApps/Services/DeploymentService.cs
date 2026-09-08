@@ -376,4 +376,32 @@ public sealed class DeploymentService
         await Task.WhenAll(output, error);
         return process.ExitCode;
     }
+
+    internal static async Task<int> RunExecutableAsync(string fileName, string arguments, string workDir, IProgress<string> log, string prolongedMessage)
+    {
+        var start = new ProcessStartInfo(fileName)
+        {
+            Arguments = arguments,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            WorkingDirectory = workDir
+        };
+        start.EnvironmentVariables["TEMP"] = workDir;
+        start.EnvironmentVariables["TMP"] = workDir;
+        using var process = Process.Start(start) ?? throw new IOException("Không khởi chạy được Optimize engine.");
+        async Task ReadAsync(StreamReader reader)
+        {
+            while (await reader.ReadLineAsync() is { } line) log.Report(line);
+        }
+        var output = ReadAsync(process.StandardOutput);
+        var error = ReadAsync(process.StandardError);
+        var exit = ProcessCompatibility.WaitForExitAsync(process);
+        if (await Task.WhenAny(exit, Task.Delay(TimeSpan.FromMinutes(30))) != exit)
+            log.Report(prolongedMessage);
+        await exit;
+        await Task.WhenAll(output, error);
+        return process.ExitCode;
+    }
 }

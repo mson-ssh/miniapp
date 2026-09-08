@@ -1,6 +1,7 @@
 param(
     [string]$ProjectRoot = $PSScriptRoot,
-    [string]$PublishedPath = ''
+    [string]$PublishedPath = '',
+    [string]$PublicPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,6 +15,8 @@ $appxWorker = Join-Path $project 'MiniApps\Scripts\Invoke-MiniAppsAppxWorker.ps1
 $wingetWorker = Join-Path $project 'MiniApps\Scripts\Invoke-MiniAppsWingetWorker.ps1'
 $parallelEngines = Join-Path $project 'MiniApps\Scripts\Optimize-ParallelEngines.ps1'
 $csproj = Join-Path $project 'MiniApps\MiniApps.csproj'
+$engineProject = Join-Path $project 'MiniApps.OptimizeEngine\MiniApps.OptimizeEngine.csproj'
+$payloadBuilder = Join-Path $project 'MiniApps.OptimizeEngine\Build-Payload.ps1'
 $expectedCommit = '6012b02ea282f23ea943946206762fd430025c6f'
 $tests = 0
 
@@ -49,21 +52,22 @@ Assert-True ($runner.IndexOf('Set-MiniAppsOptimizeEngineConfiguration') -lt $run
 Assert-True (-not ($runner -match 'Move-Item[\s\S]+Backups')) 'Optimize runner still moves its only Registry backup out of disposable work after applying changes.'
 $projectText = Get-Content -LiteralPath $csproj -Raw
 Assert-True ($projectText -match 'Condition="''\$\(TargetFramework\)'' == ''net48''"') 'Project has no net48-specific content group.'
-Assert-True ($projectText -match 'ThirdParty\\Win11Debloat') 'Project does not package the bundled engine.'
-Assert-True ($projectText -match 'Engine\\Debloat') 'Project does not place the bundled engine under the short runtime path.'
-Assert-True ($projectText -match '<None\s+Include="\.\.\\ThirdParty\\Win11Debloat\\\*\*\\\*"') 'Vendored engine must be a non-WPF None item.'
+Assert-True ($projectText -match 'MiniApps\.OptimizeEngine\\MiniApps\.OptimizeEngine\.csproj') 'Developer net48 does not build the silent Optimize engine.'
+Assert-True ($projectText.Contains('<ItemGroup Condition="''$(TargetFramework)'' == ''net48'' and ''$(MiniAppsEdition)'' == ''Developer''">')) 'Optimize engine is not restricted to Developer net48.'
+Assert-True (-not ($projectText -match 'ThirdParty\\Win11Debloat')) 'Main WPF project still packages the loose Win11Debloat tree.'
 Assert-True (-not ($projectText -match '<Content\s+Include="\.\.\\ThirdParty\\Win11Debloat')) 'Vendored engine is still registered as WPF Content.'
+Assert-True (Test-Path -LiteralPath $engineProject -PathType Leaf) 'Silent Optimize engine project is missing.'
+Assert-True (Test-Path -LiteralPath $payloadBuilder -PathType Leaf) 'Optimize payload builder is missing.'
+$engineProjectText = Get-Content -LiteralPath $engineProject -Raw
+Assert-True ($engineProjectText.Contains('<EmbeddedResource Include="$(PayloadPath)" LogicalName="MiniApps.OptimizeEngine.Payload.zip"')) 'Optimize payload is not embedded in the engine EXE.'
 if (-not [string]::IsNullOrWhiteSpace($PublishedPath)) {
     $publishedRoot = [System.IO.Path]::GetFullPath($PublishedPath)
-    $publishedEngine = Join-Path $publishedRoot 'Engine\Debloat'
-    Assert-True (Test-Path -LiteralPath (Join-Path $publishedEngine 'Win11Debloat.ps1') -PathType Leaf) 'Published net48 output lacks the bundled entry point.'
-    Assert-True (Test-Path -LiteralPath (Join-Path $publishedEngine 'LICENSE') -PathType Leaf) 'Published net48 output lacks the MIT license.'
-    Assert-True (Test-Path -LiteralPath (Join-Path $publishedEngine 'UPSTREAM.md') -PathType Leaf) 'Published net48 output lacks provenance.'
-    Assert-True (Test-Path -LiteralPath (Join-Path $publishedEngine 'Schemas\MainWindow.xaml') -PathType Leaf) 'Published upstream XAML runtime data is missing.'
-    Assert-True (Test-Path -LiteralPath (Join-Path $publishedRoot 'Scripts\Optimize-WorkerMonitor.ps1') -PathType Leaf) 'Published net48 output lacks the worker monitor.'
-    Assert-True (Test-Path -LiteralPath (Join-Path $publishedRoot 'Scripts\Invoke-MiniAppsAppxWorker.ps1') -PathType Leaf) 'Published net48 output lacks the external Appx worker.'
-    Assert-True (Test-Path -LiteralPath (Join-Path $publishedRoot 'Scripts\Invoke-MiniAppsWingetWorker.ps1') -PathType Leaf) 'Published net48 output lacks the external WinGet worker.'
-    Assert-True (Test-Path -LiteralPath (Join-Path $publishedRoot 'Scripts\Optimize-ParallelEngines.ps1') -PathType Leaf) 'Published net48 output lacks the parallel engine orchestrator.'
+    $publishedEngineExe = Join-Path $publishedRoot 'MiniApps.OptimizeEngine.exe'
+    Assert-True (Test-Path -LiteralPath $publishedEngineExe -PathType Leaf) 'Developer net48 output lacks MiniApps.OptimizeEngine.exe.'
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $publishedRoot 'Engine'))) 'Developer output still contains a loose engine tree.'
+    Assert-True (@(Get-ChildItem -LiteralPath (Join-Path $publishedRoot 'Scripts') -Filter '*Optimize*' -File -ErrorAction SilentlyContinue).Count -eq 0) 'Developer output still contains loose Optimize scripts.'
+    $verifyOutput = @(& $publishedEngineExe --verify)
+    Assert-True ($LASTEXITCODE -eq 0 -and ($verifyOutput -join "`n") -match 'MINIAPPS_ENGINE_VERIFY:files=352;sha256=[a-f0-9]{64}') 'Embedded Optimize payload verification failed.'
 
     Add-Type -AssemblyName PresentationCore
     $assembly = [Reflection.Assembly]::LoadFrom((Join-Path $publishedRoot 'MiniApps.exe'))
@@ -77,6 +81,13 @@ if (-not [string]::IsNullOrWhiteSpace($PublishedPath)) {
     try { $resourceKeys = @($resourceReader.GetEnumerator() | ForEach-Object { [string]$_.Key }) }
     finally { $resourceReader.Close(); $resourceStream.Dispose() }
     Assert-True ($resourceKeys -contains 'mainwindow.baml') 'Published assembly lacks the compiled MiniApps MainWindow resource.'
+}
+if (-not [string]::IsNullOrWhiteSpace($PublicPath)) {
+    $publicRoot = [System.IO.Path]::GetFullPath($PublicPath)
+    Assert-True (Test-Path -LiteralPath (Join-Path $publicRoot 'MiniApps.exe') -PathType Leaf) 'Public output lacks MiniApps.exe.'
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $publicRoot 'MiniApps.OptimizeEngine.exe'))) 'Public output unexpectedly contains the Developer Optimize engine.'
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $publicRoot 'Engine'))) 'Public output unexpectedly contains a loose engine tree.'
+    Assert-True (@(Get-ChildItem -LiteralPath (Join-Path $publicRoot 'Scripts') -Filter '*Optimize*' -File -ErrorAction SilentlyContinue).Count -eq 0) 'Public output unexpectedly contains Optimize scripts.'
 }
 
 . $copyHelper

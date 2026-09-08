@@ -1,5 +1,13 @@
 # Trạng thái bàn giao
 
+## Optimize engine một EXE — local net48
+
+Developer net48 nay đóng gói toàn bộ fork Win11Debloat và tám script điều phối vào resource ZIP của `MiniApps.OptimizeEngine.exe`. Service gọi helper bằng `--run --silent`; helper xác minh payload trước khi giải nén, chuyển tiếp protocol stdout/stderr và trả nguyên mã thoát cho UI. Output Developer không còn cây `Engine/Debloat` hoặc script Optimize rời. Output Public loại hoàn toàn helper và payload Optimize, phù hợp giao diện chỉ có Install Software và Driver.
+
+Kiểm tra hiện tại: helper 392192 bytes, payload 352 tệp; `--verify`, `--version`, kiểm tra payload xác định và fixture EXE độc lập đều đạt. Build net48 sạch 0 warning/0 error; 71 logic tests, 6 WPF checks, 77 kiểm tra bundle và các fixture parallel/task bridge/Appx worker/WinGet worker/timeout đều đạt. Build sạch net10 đạt; 53 logic tests và 5 WPF checks đạt để xác nhận source dùng chung không bị ảnh hưởng. Output kiểm tra Developer có 14 file; Public có 15 file và ZIP thử 502198 bytes, giảm từ 368 file của gói v0.3.6 xuống cấu trúc gọn. Public validate config và startup smoke đều thoát mã 0. Bản Developer net48 thật đã được mở từ output riêng để người dùng kiểm thử. Không fixture nào chạy Optimize hoặc thay đổi Windows thật.
+
+Đang chuẩn bị phát hành `v0.3.7` theo yêu cầu người dùng. Bootstrap vẫn trỏ `v0.3.6` cho tới khi asset mới tồn tại và được tải lại để xác minh.
+
 ## Phát hành v0.3.6 — 2026-09-08
 
 Đã phát hành source tại commit `f617fb0c1a91722faffc0c9b9e3709d754ac5797` cùng hai gói Public mới. ZIP net48 có 878546 bytes, SHA-256 `fb94ae0ea2d63d2b0a7a0eec21e4130f80ddfb2cf1d02dd2e8c74613fb527fba`; ZIP net10 self-contained có 63080335 bytes, SHA-256 `e1cbb8c392061b92d19fa0a9118e8351a298d4b11a9d4233bd4058723801f515`. Release công khai đủ hai ZIP, hai checksum và `manifest-win-x64.json`; cả hai ZIP đã được tải lại từ GitHub và khớp hash/kích thước. Bootstrap được chuyển sang `v0.3.6` sau bước xác minh. Lệnh `irm` nay nhận giao diện Public chỉ có Install Software và Driver. Không chạy Install, Optimize hoặc Windows Setting thật trong quá trình phát hành.
