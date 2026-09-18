@@ -1,5 +1,31 @@
 # Trạng thái bàn giao
 
+## Bootstrap tự chuyển sang net10 — 2026-09-18, local
+
+Sau khi giải nén, bootstrap chạy thử gói ở chế độ ẩn bằng `MiniApps.exe --validate-config` (`Test-MiniAppsPackage`, giới hạn 60 giây, quá hạn thì dừng tiến trình chạy thử). Máy chọn net48 mà chạy thử thất bại thì tải net10 và thử tiếp (`Get-MiniAppsTargetOrder`); cả hai thất bại thì báo lỗi, không cài gì. Hash hoặc kích thước sai vẫn dừng ngay, không chuyển gói. Hai hàm mới được đưa vào lệnh nâng quyền. `Test-Bootstrap.ps1` đạt 8/8 nhóm, thêm thứ tự fallback và chạy thử với fixture thoát 0 / khác 0 / không khởi động được / treo. Chạy thử với hai bản build thật net48 và net10 đều thành công (~0,3–0,4 giây). Chưa kiểm thử toàn luồng fallback qua mạng vì cần Release thật; chưa commit/push/phát hành, bootstrap vẫn trỏ `v0.3.7`.
+
+## Đồng bộ net10 theo net48 — 2026-09-18, local
+
+Theo yêu cầu người dùng, mọi nhánh `#if NET48` trong source và test đã được gỡ: net10 giờ dùng đúng code của net48. Cụ thể: Smart Skip ba trạng thái (`InstalledSoftwareDetector.net48.cs` đổi tên thành `InstalledSoftwareDetector.cs`), kiểm tra lại trước khi chạy bộ cài, log `InstallLogs`, nút Cài đặt chỉ khóa khi không có lỗi, tổng kết có số bỏ qua/chưa xác minh, `StartupFailureLog` và cờ `--startup-smoke-test`. Nhánh net10 cũ (so tên Registry bằng regex, Office chỉ khớp "2024") đã bị xóa. Chỉ còn shim `#if NETFRAMEWORK` cho `IsExternalInit`.
+
+Kiểm tra: build sạch 0 warning/0 error trên cả hai target; mỗi target đạt 49 logic tests và 5 WPF checks, 3/3 lần chạy, danh sách test giống hệt nhau. `--smart-skip-audit` (chỉ đọc) trên máy phát triển cho kết quả giống hệt giữa net48 và net10: 11 Installed (gồm Office Home & Student 2021, VC++ v14 x64/x86), WPS NotInstalled, 0 lỗi đọc. Output `artifacts/review-sync-net48-20260918-170905` (15 file) và `artifacts/review-sync-net10-20260918-170905` (404 file, self-contained) đều có `--validate-config` và `--preview --startup-smoke-test` thoát mã 0; bản net10 thật đã mở để người dùng xem. Lưu ý: test giả lập Smart Skip ghi log fixture vào `%LocalAppData%\MiniApps\InstallLogs` thật (có từ trước với net48, giờ cả net10); log fixture của các lần chạy hôm nay đã được dọn. Chưa commit/push/phát hành; gói net10 trên Release vẫn là v0.3.6.
+
+## Gỡ edition Developer, chỉ còn Public — 2026-09-18, local
+
+Theo yêu cầu người dùng, source chỉ còn một bản. Cờ MSBuild `MiniAppsEdition` và `MINIAPPS_DEVELOPER`, `BuildEdition.cs`, `Run-Developer.ps1`, nhánh `-Developer` của `Preview.ps1` và các tham số `--initialize-release-config` / `--developer-preview` đã bị gỡ. Theo đó, trang Setting (CRUD catalog) cùng phần ghi của `SettingsStore` (`Save`, `SaveWindows`) cũng bị gỡ; ứng dụng chỉ đọc `ReleaseConfig`, catalog sửa trực tiếp trong JSON. Phần Optimize còn sót (`OptimizeService.net48.cs`, `AnimatedStackPanel`, model Optimize, trang XAML, `RunExecutableAsync`) vốn chỉ vào được qua Developer nên cũng bị gỡ. Điều hướng giờ còn hai trang: `Page` 0 = Install Software, 1 = Driver.
+
+Style dùng chung được tách từ `App.xaml` sang `Theme.xaml`. Test WPF dùng một `Application` trơn nạp `Theme.xaml` thay vì `MiniApps.App`: constructor của `Application` tự xếp `OnStartup` vào dispatcher, trước đây lời gọi đó âm thầm mở thêm một cửa sổ Developer thật trong lúc test, còn với bản Public thì nó báo thiếu `ReleaseConfig` rồi tắt app giữa chừng.
+
+Kiểm tra: build net48 sạch 0 warning/0 error; 49 logic tests và 5 WPF checks đạt 3/3 lần chạy (các test Setting/Optimize/Developer đã bỏ cùng tính năng). Output `artifacts/review-public-only-net48-20260918-165332` có 15 file; `--validate-config` và `--preview --startup-smoke-test` đều thoát mã 0; bản thật đã được mở để người dùng xem. Backup source trước thay đổi: `artifacts/backup-before-remove-developer-20260918.zip`. Không chạy Install hay Windows settings thật; chưa commit/push/phát hành. Release `v0.3.7` trên bootstrap vẫn là bản cũ.
+
+net10 (theo yêu cầu người dùng, cùng ngày): build sạch 0 warning/0 error với SDK 10.0.400; 42 logic tests và 5 WPF checks đạt 3/3 lần chạy. 7 test chênh so với net48 là các tính năng chỉ có trên net48 (Smart Skip ba trạng thái, log lỗi khởi động). Publish self-contained win-x64 vào `artifacts/review-public-only-net10-20260918-170122` (404 file, 141 MB); `--validate-config` thoát mã 0 và bản thật đã mở, cửa sổ phản hồi. net10 không có cờ `--startup-smoke-test`. Gói net10 trên Release vẫn là bản v0.3.6 cũ, chưa thay.
+
+## Quy trình Public mặc định — 2026-09-18
+
+Theo yêu cầu người dùng, từ nay chỉ làm việc và mở Public net48 theo mặc định. Developer được giữ nguyên, ẩn khỏi quy trình làm việc, không xóa; chỉ mở lại khi người dùng yêu cầu. Quy định này thay thế các hướng dẫn mở Developer mặc định trong những mục lịch sử bên dưới. Build Public dùng `MiniAppsEdition=Public`, output riêng và bản sao `ReleaseConfig` cạnh executable.
+
+Trong phiên này đã build, validate cấu hình và mở Public net48 thành công để người dùng xem; cửa sổ có phản hồi. Thay đổi quy trình chỉ cập nhật tài liệu, không sửa logic ứng dụng, không chạy bộ cài hoặc Windows settings, không build net10, không commit/push/phát hành.
+
 ## Gỡ Debloat/Optimize — source trên main
 
 Thẻ Optimize Windows bị ẩn trong cả Developer và Public. Engine helper, cây Win11Debloat vendor, script/fixture engine và mục Debloat trong Windows Setting được gỡ khỏi source đóng gói. Cấu hình Windows tăng lên schema 3; cấu hình schema 1/2 được đọc tương thích và tự loại mục Debloat trong bộ nhớ. Developer còn Install Software, Driver, Setting; Public còn Install Software và Driver. Build net48 và net10 sạch 0 warning/0 error; net48 đạt 71 logic tests cùng 7 WPF checks, net10 đạt 53 logic tests cùng 6 WPF checks. Output net48 mới có 13 file cho Developer và 15 file cho Public, không có tệp Debloat/Optimize; Public validate config thoát mã 0. Bản Developer net48 thật đã được mở để người dùng kiểm tra. Không chạy Install hoặc thay đổi Windows thật. Source đã được push lên `main` tại commit `3497963c`. Chưa tạo Release mới; bootstrap và lệnh `irm` vẫn dùng bản `v0.3.7`.

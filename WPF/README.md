@@ -8,16 +8,15 @@ MiniApps là ứng dụng WPF dành cho Windows 10/11 x64. Ứng dụng yêu c�
 irm https://raw.githubusercontent.com/mson-ssh/miniapp/main/WPF/bootstrap.ps1 | iex
 ```
 
-`irm` là bí danh của `Invoke-RestMethod`. Bootstrap tự yêu cầu UAC, chọn gói net48 khi máy có .NET Framework 4.8 hoặc dùng gói net10 self-contained dự phòng, xác minh manifest/kích thước/SHA-256 rồi mới chạy.
+`irm` là bí danh của `Invoke-RestMethod`. Bootstrap tự yêu cầu UAC, chọn gói net48 khi máy có .NET Framework 4.8 hoặc dùng gói net10 self-contained dự phòng (kể cả khi net48 chạy thử không được), xác minh manifest/kích thước/SHA-256 rồi mới chạy.
 
 Lệnh trên hiện tải Release đã xác minh `v0.3.7`. Bootstrap chỉ được chuyển sang phiên bản mới sau khi đủ hai ZIP, hai checksum và manifest trên GitHub Release đã được tải lại để kiểm tra.
 
-## Giao diện và edition
+## Giao diện
 
-- **Public:** chỉ hiển thị **Install Software** và **Driver**.
-- **Developer:** hiển thị **Install Software**, **Driver** và **Setting**.
-- Cả hai edition đều dùng manifest `requireAdministrator`.
-- Public đọc cấu hình đóng gói trong `ReleaseConfig`; Developer có thể chỉnh cấu hình thật trong workspace.
+- Chỉ có một bản: hai trang **Install Software** và **Driver**.
+- Manifest `requireAdministrator`.
+- Đọc cấu hình đóng gói trong `ReleaseConfig` cạnh executable. Muốn đổi catalog thì sửa `ReleaseConfig/apps.json` và `windows.json` rồi phát hành lại.
 
 ## Chức năng
 
@@ -25,15 +24,11 @@ Lệnh trên hiện tải Release đã xác minh `v0.3.7`. Bootstrap chỉ đư�
 
 Một lần bấm sẽ chọn Office 2024 hoặc WPS rồi xử lý toàn bộ catalog cùng các Windows Setting đã cấu hình. EXE có thể chạy song song; MSI được xếp hàng tuần tự theo giới hạn của Windows Installer.
 
-Trên net48, Smart Skip đọc inventory phần mềm theo ba trạng thái `Installed`, `NotInstalled`, `Unknown`, kiểm tra lại trước khi mở installer và ghi bằng chứng vào `%LocalAppData%\MiniApps\InstallLogs`. Trạng thái không xác minh được sẽ không tự cài đè.
+Smart Skip (cả net48 và net10) đọc inventory phần mềm theo ba trạng thái `Installed`, `NotInstalled`, `Unknown`, kiểm tra lại trước khi mở installer và ghi bằng chứng vào `%LocalAppData%\MiniApps\InstallLogs`. Trạng thái không xác minh được sẽ không tự cài đè.
 
 ### Driver
 
 Hiển thị host, hãng, model và serial; cho phép sao chép serial và mở trang hỗ trợ chính thức của nhà sản xuất. MiniApps chưa tự tải hoặc cài driver.
-
-### Setting
-
-Chỉ có trong Developer, dùng để quản lý catalog ứng dụng và Windows Setting. Lưu cấu hình không tự chạy cài đặt hoặc thay đổi Windows.
 
 ## Build và kiểm thử
 
@@ -45,11 +40,9 @@ dotnet build ./MiniApps.Tests/MiniApps.Tests.csproj -c Release -f net48
 
 dotnet build ./MiniApps.Tests/MiniApps.Tests.csproj -c Release -f net10.0-windows
 ./MiniApps.Tests/bin/Release/net10.0-windows/MiniApps.Tests.exe
-
-./Run-Developer.ps1 -Target net48
 ```
 
-`Run-Developer.ps1` mở bản Developer net48 với cấu hình thật trong `ReleaseConfig`. `Preview.ps1` dành cho mô phỏng. Không bấm Install trên máy phát triển nếu không chủ động muốn áp dụng thay đổi thật.
+`Preview.ps1` dành cho mô phỏng. Không bấm Install trên máy phát triển nếu không chủ động muốn áp dụng thay đổi thật.
 
 ## Phát hành
 

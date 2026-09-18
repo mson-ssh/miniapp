@@ -1,5 +1,4 @@
 using System.Windows;
-using MiniApps.Models;
 using MiniApps.Services;
 using MiniApps.ViewModels;
 
@@ -10,24 +9,9 @@ public partial class App : Application
     {
         base.OnStartup(e);
         var configRoot = Option(e.Args, "--config-root");
-        var headless = e.Args.Contains("--validate-config") || e.Args.Contains("--initialize-release-config")
-#if NET48
-            || e.Args.Contains("--startup-smoke-test")
-#endif
-            ;
+        var headless = e.Args.Contains("--validate-config") || e.Args.Contains("--startup-smoke-test");
         try
         {
-#if MINIAPPS_DEVELOPER
-            if (e.Args.Contains("--initialize-release-config"))
-            {
-                if (string.IsNullOrWhiteSpace(configRoot)) throw new ArgumentException("Thiếu --config-root cho cấu hình phát hành.");
-                var initial = new SettingsStore(configRoot);
-                if (!File.Exists(Path.Combine(configRoot, "apps.json"))) initial.Save(Catalog.Defaults());
-                if (!File.Exists(Path.Combine(configRoot, "windows.json"))) initial.SaveWindows(WindowsSettingsCatalog.Defaults());
-                Shutdown(0);
-                return;
-            }
-#endif
             if (e.Args.Contains("--validate-config"))
             {
                 if (string.IsNullOrWhiteSpace(configRoot)) throw new ArgumentException("Thiếu --config-root để kiểm tra cấu hình.");
@@ -38,34 +22,20 @@ public partial class App : Application
                 return;
             }
 
-#if MINIAPPS_DEVELOPER
-            var developerPreview = e.Args.Contains("--developer-preview");
-            var preview = developerPreview || e.Args.Contains("--preview");
-            var model = new MainViewModel(preview, developerEdition: true,
-                settingsDirectory: configRoot, settingsWritable: developerPreview);
-#else
             var preview = e.Args.Contains("--preview");
             configRoot = Path.Combine(AppContext.BaseDirectory, "ReleaseConfig");
-            var model = new MainViewModel(preview, developerEdition: false,
-                settingsDirectory: configRoot, requireSettings: true);
-#endif
+            var model = new MainViewModel(preview, settingsDirectory: configRoot, requireSettings: true);
             var window = new MainWindow(model);
             MainWindow = window;
-#if NET48
             if (e.Args.Contains("--startup-smoke-test"))
                 window.Loaded += (_, _) => Dispatcher.BeginInvoke(new Action(() => { window.Close(); Shutdown(0); }));
-#endif
             window.Show();
         }
         catch (Exception ex)
         {
-#if NET48
             var startupLog = StartupFailureLog.TryWrite(ex);
             if (!headless)
                 MessageBox.Show(StartupFailureLog.BuildUserMessage(ex, startupLog), "MiniApps - lỗi khởi động", MessageBoxButton.OK, MessageBoxImage.Error);
-#else
-            if (!headless) MessageBox.Show(ex.Message, "MiniApps - cấu hình không hợp lệ", MessageBoxButton.OK, MessageBoxImage.Error);
-#endif
             Shutdown(2);
         }
     }

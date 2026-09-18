@@ -1,4 +1,3 @@
-#if NET48
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
@@ -235,4 +234,3 @@ internal static class InstalledSoftwareDetector
         }
     }
 }
-#endif

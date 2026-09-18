@@ -1,6 +1,6 @@
 param(
     [ValidateSet('win-x64')][string]$Runtime = 'win-x64',
-    [ValidatePattern('^[a-zA-Z0-9._-]+$')][string]$Version = '0.3.7',
+    [ValidatePattern('^[a-zA-Z0-9._-]+$')][string]$Version = '0.3.8',
     [ValidateSet('net48','both')][string]$Target = 'net48',
     [string]$Dotnet = 'dotnet'
 )
@@ -10,7 +10,7 @@ New-Item -Path $artifacts -ItemType Directory -Force | Out-Null
 $project = Join-Path $PSScriptRoot 'MiniApps/MiniApps.csproj'
 $releaseConfig = Join-Path $PSScriptRoot 'ReleaseConfig'
 if (-not (Test-Path -LiteralPath (Join-Path $releaseConfig 'apps.json')) -or -not (Test-Path -LiteralPath (Join-Path $releaseConfig 'windows.json'))) {
-    throw 'ReleaseConfig is incomplete. Run Preview.ps1 -Developer once and save the reviewed configuration.'
+    throw 'ReleaseConfig is incomplete. Add the reviewed apps.json and windows.json to ReleaseConfig.'
 }
 $assets = @()
 
@@ -22,7 +22,7 @@ function New-MiniAppsPackage {
     )
     $stage = Join-Path $artifacts ("publish-$Target-" + [Guid]::NewGuid().ToString('N'))
     New-Item -Path $stage -ItemType Directory -Force | Out-Null
-    $arguments = @('publish', $project, '-c', 'Release', '-f', $Framework, '-p:PlatformTarget=x64', '-p:MiniAppsEdition=Public', "-p:Version=$Version", '-p:DebugType=None', '-p:DebugSymbols=false', '-o', $stage)
+    $arguments = @('publish', $project, '-c', 'Release', '-f', $Framework, '-p:PlatformTarget=x64', "-p:Version=$Version", '-p:DebugType=None', '-p:DebugSymbols=false', '-o', $stage)
     if ($SelfContained) {
         $arguments += @('-r', $Runtime, '--self-contained', 'true', '-p:PublishSingleFile=false', '-p:PublishTrimmed=false')
     } else {

@@ -16,14 +16,6 @@ public sealed class SettingsStore(string? directory = null)
         Catalog.Validate(apps);
         return apps;
     }
-    public void Save(IEnumerable<AppDefinition> apps)
-    {
-        var items = apps.ToList();
-        Catalog.Validate(items);
-        var present = items.Select(x => x.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var removed = Catalog.Defaults().Where(x => !present.Contains(x.Id)).Select(x => x.Id).ToList();
-        Write("apps.json", new SettingsEnvelope<AppDefinition>(AppsSchemaVersion, items, removed));
-    }
     public List<WindowsSettingDefinition> LoadWindows(bool required = false)
     {
         var path = Path.Combine(DirectoryPath, "windows.json");
@@ -48,14 +40,6 @@ public sealed class SettingsStore(string? directory = null)
         WindowsSettingsCatalog.Validate(settings);
         return settings;
     }
-    public void SaveWindows(IEnumerable<WindowsSettingDefinition> settings)
-    {
-        var items = settings.ToList();
-        WindowsSettingsCatalog.Validate(items);
-        var present = items.Select(x => x.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var removed = WindowsSettingsCatalog.Defaults().Where(x => !present.Contains(x.Id)).Select(x => x.Id).ToList();
-        Write("windows.json", new SettingsEnvelope<WindowsSettingDefinition>(WindowsSchemaVersion, items, removed));
-    }
     private static SettingsEnvelope<T> Read<T>(string path, int currentVersion, int legacyVersion = 1)
     {
         var json = File.ReadAllText(path);
@@ -76,26 +60,6 @@ public sealed class SettingsStore(string? directory = null)
             throw new InvalidDataException($"Phiên bản cấu hình {result.SchemaVersion} chưa được hỗ trợ.");
         if (result.Items == null || result.RemovedDefaultIds == null) throw new InvalidDataException("Cấu hình thiếu dữ liệu.");
         return result;
-    }
-    private void Write<T>(string filename, T value)
-    {
-        Directory.CreateDirectory(DirectoryPath);
-        var path = Path.Combine(DirectoryPath, filename);
-        var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try
-        {
-            File.WriteAllText(temp, JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true }));
-            if (File.Exists(path))
-            {
-                // Same-volume replacement is atomic; on failure the existing target remains intact.
-                File.Replace(temp, path, null, true);
-            }
-            else File.Move(temp, path);
-        }
-        finally
-        {
-            try { if (File.Exists(temp)) File.Delete(temp); } catch { }
-        }
     }
 }
 

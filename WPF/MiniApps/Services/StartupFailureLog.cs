@@ -1,4 +1,3 @@
-#if NET48
 using System.Text;
 
 namespace MiniApps.Services;
@@ -44,4 +43,3 @@ public static class StartupFailureLog
             : message + "\n\nNhật ký lỗi:\n" + logPath;
     }
 }
-#endif

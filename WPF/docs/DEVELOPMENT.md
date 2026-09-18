@@ -20,13 +20,17 @@ Test hiện dùng fake runner/download và WPF mô phỏng, không chạy instal
 
 Gói Public net48 có cờ nội bộ `--startup-smoke-test`: cờ này vẫn tạo cửa sổ WPF thật rồi tự đóng sau sự kiện Loaded, trả mã 0 nếu khởi động thành công. Kết hợp với `--preview` khi kiểm tra output để bảo đảm không có tác vụ thật được chạy.
 
-Mở bản Developer thật sau khi sửa tính năng:
+Sau khi sửa tính năng, build/mở **net48** vào output mới dưới `artifacts`, sao chép `ReleaseConfig/apps.json` và `windows.json` vào thư mục `ReleaseConfig` cạnh executable, validate cấu hình rồi mở để người dùng kiểm tra. Luôn truyền `-f net48`; không chạy `Publish.ps1` chỉ để xem giao diện. Không tự bấm Install. `Preview.ps1` mở bản publish gần nhất ở chế độ `--preview`, không mạng và không thay đổi hệ thống.
 
 ```powershell
-& ./Run-Developer.ps1 -Target net48 -Dotnet dotnet
+$out = "./artifacts/review-net48-$(Get-Date -Format yyyyMMdd-HHmmss)"
+dotnet publish ./MiniApps/MiniApps.csproj -c Release -f net48 --no-self-contained -p:DebugType=None -p:DebugSymbols=false -o $out
+New-Item -ItemType Directory -Force "$out/ReleaseConfig" | Out-Null
+Copy-Item ./ReleaseConfig/apps.json, ./ReleaseConfig/windows.json "$out/ReleaseConfig"
+& "$out/MiniApps.exe" --validate-config --config-root "$out/ReleaseConfig"
 ```
 
-Bản này không truyền `--preview` hoặc `--developer-preview`: Setting đọc/ghi `ReleaseConfig` và nút Install có thể thực thi thật. AI chỉ build/mở ứng dụng; người dùng trực tiếp quyết định khi nào bấm Install. Mỗi build dùng thư mục riêng để không ghi đè executable đang mở. `Preview.ps1` vẫn dùng khi cần dữ liệu giả, không mạng và không thay đổi hệ thống.
+Edition Developer (trang Setting, `Run-Developer.ps1`, cờ `MiniAppsEdition`) đã bị gỡ ngày 2026-09-18. Muốn đổi catalog thì sửa trực tiếp `ReleaseConfig/*.json`; ứng dụng sẽ validate khi khởi động và khi chạy `--validate-config`.
 
 ## Mang theo và bỏ qua
 
