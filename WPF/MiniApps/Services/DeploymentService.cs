@@ -101,9 +101,12 @@ public sealed class DeploymentService
                 var isMsi = Path.GetExtension(path).Equals(".msi", StringComparison.OrdinalIgnoreCase);
                 var file = isMsi ? Path.Combine(Environment.SystemDirectory, "msiexec.exe") : path;
                 var args = isMsi ? $"/i \"{path}\" {app.Arguments}" : app.Arguments;
+                // -Wait also waits for every process the installer started. An installer that leaves the
+                // installed app running is awaited on its own; reading Handle first keeps its exit code.
                 var command = $"$p = Start-Process -FilePath {Quote(file)} " +
                     (string.IsNullOrWhiteSpace(args) ? "" : $"-ArgumentList {Quote(args)} ") +
-                    "-Wait -PassThru -ErrorAction Stop; if ($null -eq $p.ExitCode) { throw 'Installer returned no exit code' }; exit $p.ExitCode";
+                    (app.WaitInstallerOnly ? "-PassThru -ErrorAction Stop; $null = $p.Handle; $p.WaitForExit(); " : "-Wait -PassThru -ErrorAction Stop; ") +
+                    "if ($null -eq $p.ExitCode) { throw 'Installer returned no exit code' }; exit $p.ExitCode";
                 int code = 1618;
                 for (var attempt = 0; attempt <= 3; attempt++)
                 {
@@ -113,7 +116,7 @@ public sealed class DeploymentService
                     {
                         token.ThrowIfCancellationRequested();
                         events.Report(new(app.Id, string.IsNullOrWhiteSpace(app.Arguments) ? "Đang cài · hãy thao tác trong bộ cài" : "Đang cài đặt", 100));
-                        log.Report($"{app.Name}: bắt đầu bộ cài. Chờ toàn bộ tiến trình con kết thúc.");
+                        log.Report(app.WaitInstallerOnly ? $"{app.Name}: bắt đầu bộ cài. Chờ bộ cài kết thúc, không chờ ứng dụng nó mở." : $"{app.Name}: bắt đầu bộ cài. Chờ toàn bộ tiến trình con kết thúc.");
                         // No forced cancellation once an installer starts: rollback is installer-specific.
                         code = await run(command, workDir, log);
                     }
@@ -239,7 +242,7 @@ public sealed class DeploymentService
                         if (size == 0) break;
                         await output.WriteAsync(buffer, 0, size, deadline.Token);
                         received += size;
-                        if (clock.ElapsedMilliseconds < 150) continue;
+                        if (clock.ElapsedMilliseconds < 250) continue;
                         var percent = total > 0 ? received * 100d / total.Value : 0;
                         events.Report(new(app.Id, $"Đang tải · {received / 1048576d:0.0} MB", percent));
                         clock.Restart();

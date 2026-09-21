@@ -34,6 +34,10 @@ Lệnh trên hiện tải Release đã xác minh `v0.3.8`. Bootstrap chỉ đư�
 
 Chọn bộ văn phòng ở drop list cạnh nút Cài đặt (Microsoft Office, WPS, OnlyOffice, Libre Office hoặc Null — mặc định, không cài bộ nào), rồi một lần bấm xử lý toàn bộ catalog cùng các Windows Setting đã cấu hình. Trước khi chạy, danh sách app hiện kèm nút tải xuống để cài riêng từng app. EXE có thể chạy song song; MSI được xếp hàng tuần tự theo giới hạn của Windows Installer.
 
+Windows Setting gồm cả "Debloatware Windows": Win11Debloat 2026.08.24 chế độ mặc định (tạo điểm khôi phục, gỡ ứng dụng cài sẵn, tắt quảng cáo/gợi ý/Copilot/Widgets, khởi động lại Explorer), chạy trong mỗi lượt cài chính. Trang EXTEND còn Môi trường C++ và Share LAN.
+
+Chọn WPS, OnlyOffice hoặc Libre Office thì lượt cài chính thêm tác vụ Windows "Gỡ Microsoft Office" (`Scripts/Remove-Office.ps1`, chuyển từ CLI): quét Click-to-Run và Programs and Features, không có Office thì kết thúc ngay; có thì tải Office Tool Plus 11.6.6.0 (R2, dự phòng GitHub, ghim SHA-256), đóng tiến trình Office, chạy `toolbox /rmoffice`, quét lại và báo lỗi nếu Office còn. Cài riêng một app và chọn Null/Microsoft Office không gỡ gì.
+
 Smart Skip (cả net48 và net10) đọc inventory phần mềm theo ba trạng thái `Installed`, `NotInstalled`, `Unknown`, kiểm tra lại trước khi mở installer và ghi bằng chứng vào `%LocalAppData%\MiniApps\InstallLogs`. Trạng thái không xác minh được sẽ không tự cài đè.
 
 ### Information

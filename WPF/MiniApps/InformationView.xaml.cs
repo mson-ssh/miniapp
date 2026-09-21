@@ -9,8 +9,8 @@ namespace MiniApps;
 public partial class InformationView : UserControl, IDisposable
 {
     private readonly CancellationTokenSource lifetime = new();
-    private readonly Func<CancellationToken, Task<IReadOnlyList<InformationRow>>> read;
-    private IReadOnlyList<InformationRow> rows = Array.Empty<InformationRow>();
+    private readonly Func<CancellationToken, Task<InformationReport>> read;
+    private InformationReport? report;
     private bool loading;
     private readonly bool preview;
     // The read reports no progress of its own, so the percentage is paced by time: about 90%
@@ -20,18 +20,18 @@ public partial class InformationView : UserControl, IDisposable
     internal int LoadingPercentShown { get; private set; }
     // Raised once fresh data is on screen, so the window can size itself to it.
     internal event Action? ContentShown;
-    internal bool HasData => rows.Count > 0 && !loading;
+    internal bool HasData => report != null && !loading;
     // How much taller (positive) or shorter (negative) the data is than the space it has now.
     internal double ContentOverflow
     {
         get { InformationScroll.UpdateLayout(); return InformationScroll.ExtentHeight - InformationScroll.ViewportHeight; }
     }
-    internal InformationView(Func<CancellationToken, Task<IReadOnlyList<InformationRow>>>? read = null, bool preview = false)
+    internal InformationView(Func<CancellationToken, Task<InformationReport>>? read = null, bool preview = false)
     {
         InitializeComponent();
         this.read = read ?? InformationService.ReadAsync;
         this.preview = preview;
-        IsVisibleChanged += async (_, _) => { if (IsVisible && rows.Count == 0) await ReloadAsync(); };
+        IsVisibleChanged += async (_, _) => { if (IsVisible && report == null) await ReloadAsync(); };
         loadingTimer.Tick += (_, _) => SetLoadingProgress(loadingProgress + (99 - loadingProgress) * 0.034);
     }
     private void SetLoadingProgress(double value)
@@ -54,8 +54,8 @@ public partial class InformationView : UserControl, IDisposable
         loadingTimer.Stop();
         LoadingPanel.Visibility = Visibility.Collapsed;
         // A failed refresh keeps showing the data read earlier.
-        InformationContent.Visibility = rows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        if (rows.Count > 0) ContentShown?.Invoke();
+        InformationContent.Visibility = report != null ? Visibility.Visible : Visibility.Collapsed;
+        if (report != null) ContentShown?.Invoke();
     }
     internal async Task ReloadAsync()
     {
@@ -67,11 +67,7 @@ public partial class InformationView : UserControl, IDisposable
         {
             var result = await read(lifetime.Token);
             if (lifetime.IsCancellationRequested) return;
-            rows = result;
-            InformationContent.DataContext = rows.ToDictionary(row => row.Name, row => row.Value);
-            InformationList.ItemsSource = rows.Where(row => row.Name is "CPU" or "RAM" or "Graphics Card");
-            StorageList.ItemsSource = rows.FirstOrDefault(row => row.Name == "Storage")?.Disks;
-            CopyButton.IsEnabled = rows.Count > 0;
+            Show(result);
             StatusText.Text = "Đã cập nhật · " + DateTime.Now.ToString("HH:mm:ss") + "  ·  Chọn văn bản để sao chép từng thông số.";
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
@@ -79,16 +75,21 @@ public partial class InformationView : UserControl, IDisposable
         finally
         {
             loading = false; RefreshButton.IsEnabled = true; ShowLoading(false);
-            DriverButton.IsEnabled = rows.Count > 0;
+            DriverButton.IsEnabled = report != null;
         }
+    }
+    internal void Show(InformationReport value)
+    {
+        report = value;
+        InformationContent.DataContext = value;
+        CopyButton.IsEnabled = true;
     }
     private async void RefreshInformation(object sender, RoutedEventArgs e) => await ReloadAsync();
     private void OpenDriver(object sender, RoutedEventArgs e)
     {
-        var serial = rows.FirstOrDefault(row => row.Name == "Serial");
         try
         {
-            OpenDriverSupport(serial?.Value ?? "", serial?.DriverUrl ?? "",
+            OpenDriverSupport(report?.Serial ?? "", report?.DriverUrl ?? "",
                 value => { if (!preview) Clipboard.SetText(value); },
                 url => { if (!preview) Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); });
             StatusText.Text = preview ? "Đã mô phỏng sao chép Serial và mở hỗ trợ driver." : "Đã sao chép Serial và mở trang hỗ trợ driver chính thức.";
@@ -108,7 +109,8 @@ public partial class InformationView : UserControl, IDisposable
     }
     private void CopyInformation(object sender, RoutedEventArgs e)
     {
-        try { Clipboard.SetText(string.Join(Environment.NewLine, rows.Select(row => row.Name + ": " + row.Value))); StatusText.Text = "Đã sao chép thông tin."; }
+        if (report == null) return;
+        try { Clipboard.SetText(report.ToText()); StatusText.Text = "Đã sao chép thông tin."; }
         catch (Exception ex) { StatusText.Text = "Không sao chép được: " + ex.Message; }
     }
     public void Dispose() { loadingTimer.Stop(); lifetime.Cancel(); }

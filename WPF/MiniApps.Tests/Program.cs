@@ -7,9 +7,12 @@ using MiniApps.ViewModels;
 var passed = 0;
 if (args.Contains("--information-audit"))
 {
-    var rows = await InformationService.ReadAsync(CancellationToken.None);
-    if (rows.Count != 12 || rows.Any(row => string.IsNullOrWhiteSpace(row.Value))) throw new Exception("Information collection failed.");
-    Console.WriteLine("PASS embedded Information script: 12 populated rows; device values omitted.");
+    var report = await InformationService.ReadAsync(CancellationToken.None);
+    var required = new[] { "Hệ điều hành", "Vi xử lý", "Bộ nhớ", "Đồ họa", "Lưu trữ", "Màn hình" };
+    if (report.Model == "—" || report.Serial == "—" || !report.Sections.Select(section => section.Title).SequenceEqual(required) ||
+        report.Sections.SelectMany(section => section.Facts).Any(fact => string.IsNullOrWhiteSpace(fact.Value)))
+        throw new Exception("Information collection failed.");
+    Console.WriteLine($"PASS embedded Information script: {report.Sections.Count} sections, {report.Sections.Sum(section => section.Facts.Count + section.Items.Count)} values; device values omitted.");
     return;
 }
 void Check(string name, Action action) { action(); Console.WriteLine("PASS " + name); passed++; }
@@ -163,9 +166,9 @@ try
         vm.Page = 3;
         Assert(vm.Page == 2 && vm.IsExtend);
     });
-    Check("EXTEND lists Debloat, the C++ environment and Share LAN", () => {
+    Check("EXTEND lists the C++ environment and Share LAN", () => {
         var vm = new MainViewModel(true);
-        Assert(vm.Extensions.Select(e => e.Id).SequenceEqual(new[] { "debloat", "cpp", "sharelan" }));
+        Assert(vm.Extensions.Select(e => e.Id).SequenceEqual(new[] { "cpp", "sharelan" }));
         Assert(vm.Extensions.All(e => e.Name.Length > 0 && e.Description.Length > 0 && e.Status == "Sẵn sàng"));
         Assert(vm.Extensions.Where(e => !e.Interactive).All(e => e.ConfirmText.Length > 0) && vm.Extensions.Single(e => e.Interactive).Id == "sharelan");
         Assert(vm.Extensions.All(e => vm.RunExtensionCommand.CanExecute(e) && !vm.OpenExtensionLogCommand.CanExecute(e)));
@@ -176,7 +179,7 @@ try
         {
             seenScript = script; seenWork = work;
             siblings.AddRange(Directory.GetFiles(work).Select(Path.GetFileName)!);
-            Assert(File.ReadAllText(script).Contains("-RunDefaults") || File.ReadAllText(script).Contains("mingw-w64-ucrt-x86_64-toolchain"));
+            Assert(File.ReadAllText(script).Contains("mingw-w64-ucrt-x86_64-toolchain"));
             log.Report("dòng thử");
             return Task.FromResult(3);
         });
@@ -188,8 +191,7 @@ try
         Assert(lines.SequenceEqual(new[] { "dòng thử" }));
         Assert(result.LogPath.StartsWith(ExtensionService.LogDirectory) && File.ReadAllText(result.LogPath).Contains("dòng thử") &&
             File.ReadAllText(result.LogPath).Contains("Kết thúc với mã 3."));
-        result = service.RunAsync("debloat", new InlineProgress<string>(_ => { })).GetAwaiter().GetResult();
-        Assert(Path.GetFileName(seenScript) == "Invoke-Win11Debloat.ps1" && result.ExitCode == 3);
+        Reject(() => ExtensionService.ScriptsFor("debloat"));
         Reject(() => ExtensionService.ScriptsFor("unknown"));
     });
     Check("EXTEND cards show progress lines and keep indented tool output for the log", () => {
@@ -231,10 +233,9 @@ try
         Assert(run.Result == 7 && lines.Contains("Tiếng Việt có dấu") && lines.Contains("lỗi thử") && lines.Contains("sau ReadKey"));
     });
     Check("Information Driver copies serial before opening official support", () => {
-        var parsed = InformationService.Parse("""{"OS":"Windows","Serial":"ABC123","Manufacturer":"Dell Inc."}""");
-        var serial = parsed.Single(row => row.Name == "Serial");
+        var serial = InformationService.Parse("""{"OS":"Windows","Serial":"ABC123","Manufacturer":"Dell Inc."}""");
         var steps = new List<string>();
-        MiniApps.InformationView.OpenDriverSupport(serial.Value, serial.DriverUrl, value => steps.Add("copy:" + value), url => steps.Add("open:" + url));
+        MiniApps.InformationView.OpenDriverSupport(serial.Serial, serial.DriverUrl, value => steps.Add("copy:" + value), url => steps.Add("open:" + url));
         Assert(steps.Count == 2 && steps[0] == "copy:ABC123" && steps[1].StartsWith("open:https://www.dell.com/"));
         steps.Clear();
         Reject(() => MiniApps.InformationView.OpenDriverSupport("ABC123", serial.DriverUrl, _ => throw new Exception("Clipboard busy"), _ => steps.Add("open")));
@@ -290,7 +291,7 @@ try
         WaitWithTimeout(operation, TimeSpan.FromSeconds(2)).GetAwaiter().GetResult();
         Assert(clock.Elapsed < TimeSpan.FromSeconds(2) && outcomes.Last().Status == "Đã hủy" && outcomes.Last().Finished && !outcomes.Last().Failed);
     });
-    Check("Install includes all remaining Windows settings without selection state", () => { var vm = new MainViewModel(true); Assert(vm.Apps.Count == 10 && vm.WindowsOptions.Count == 11 && vm.WindowsOptions.All(o => !MainViewModel.IsDebloat(o.Definition)) && typeof(WindowsOption).GetProperty("Selected") == null && vm.SelectionText.Contains("11 thiết lập")); });
+    Check("Install includes all remaining Windows settings without selection state", () => { var vm = new MainViewModel(true); Assert(vm.Apps.Count == 10 && vm.WindowsOptions.Count == 12 && vm.WindowsOptions.All(o => !MainViewModel.IsDebloat(o.Definition)) && typeof(WindowsOption).GetProperty("Selected") == null && vm.SelectionText == "11 ứng dụng · 11 thiết lập Windows"); });
     Check("Disk setting keeps the CLI partitioning rules", () => {
         var setting = WindowsSettingsCatalog.Defaults().Single(s => s.Id == "Disk");
         foreach (var part in new[] { "SizeD = 50.1GB", "SizeD = 200.1GB", "SizeD = 400.1GB; SizeE = 200.1GB", "$totalGB -gt 1100",
@@ -335,7 +336,7 @@ try
     Check("Office suite picker defaults to Null and filters the install list", () => {
         var vm = new MainViewModel(true);
         Assert(vm.SelectedSuite == "" && vm.CanChooseSuite && vm.OfficeSuites.Select(o => o.Label).SequenceEqual(new[] { "Microsoft Office", "WPS", "OnlyOffice", "Libre Office", "Null" }));
-        Assert(vm.Apps.Count == 10 && vm.Apps.All(a => a.Definition.Suite == "") && vm.SelectionText.StartsWith("10 ứng dụng"));
+        Assert(vm.Apps.Count == 10 && vm.Apps.All(a => a.Definition.Suite == "") && vm.SelectionText.StartsWith("11 ứng dụng"));
         foreach (var suite in new[] { "Office", "WPS", "OnlyOffice", "LibreOffice" })
         {
             vm.SelectedSuite = suite;
@@ -344,10 +345,27 @@ try
         vm.SelectedSuite = "";
         Assert(vm.Apps.Count == 10 && vm.Apps.All(a => a.Definition.Suite == ""));
     });
+    Check("Picking another office suite removes Microsoft Office first", () => {
+        var vm = new MainViewModel(true);
+        Assert(!vm.RemovesOffice);
+        vm.SelectedSuite = "Office"; Assert(!vm.RemovesOffice);
+        foreach (var suite in new[] { "WPS", "OnlyOffice", "LibreOffice" }) { vm.SelectedSuite = suite; Assert(vm.RemovesOffice); }
+        var removal = WindowsSettingsCatalog.RemoveOffice();
+        WindowsSettingsCatalog.Validate([removal]);
+        Assert(removal.Name == "Gỡ Microsoft Office" && removal.Script.Contains("toolbox /rmoffice") &&
+            removal.Script.Contains("68A9EBF8B569FA56A55A1B3601EC9260AEB2A3D9ACFED1DEF039C4CC9E092C9F") && removal.Script.Contains("Get-FileHash"));
+        Assert(WindowsSettingsCatalog.Defaults().All(setting => setting.Action != "RemoveOffice"));
+    });
+    Check("Debloat runs Win11Debloat in its default mode as a Windows setting", () => {
+        var debloat = WindowsSettingsCatalog.Defaults().Single(s => s.Id == "Win11Debloat");
+        Assert(debloat.Action == "Win11Debloat" && debloat.Name == "Debloatware Windows" && !MainViewModel.IsDebloat(debloat));
+        Assert(debloat.Script.Contains("'-RunDefaults', '-Silent'") && debloat.Script.Contains("00D1487B2E9B9691653774CC781ED3844E4B2FD5B0D91C32F6F78AA8C7892BD4"));
+    });
     Check("One-click install includes the whole catalog", () => { var vm = new MainViewModel(true); Assert(vm.IsReady && !vm.HasStarted && vm.Apps.Count == 10 && vm.InstallCommand.CanExecute(null)); Assert(typeof(AppRow).GetProperty("Selected") == null); });
     Check("Ready list offers every catalog app for a single install", () => {
         var vm = new MainViewModel(true);
-        Assert(vm.ReadyApps.Count == 14 && new[] { "office", "wps", "onlyoffice", "libreoffice" }.All(id => vm.ReadyApps.Any(r => r.Definition.Id == id)));
+        Assert(vm.ReadyApps.Count == 15 && new[] { "office", "wps", "onlyoffice", "libreoffice" }.All(id => vm.ReadyApps.Any(r => r.Definition.Id == id)));
+        Assert(vm.ReadyApps.Last() is { Name: "Debloatware Windows" } debloatReady && debloatReady.Definition.Id == "windows:Win11Debloat");
         Assert(vm.ReadyApps.All(r => r.Status == "Sẵn sàng" && vm.InstallOneCommand.CanExecute(r)) && !vm.InstallOneCommand.CanExecute(null));
     });
     Check("Progress distinguishes download from opaque installer", () => { var row = new AppRow(Catalog.Defaults()[0]) { Status = "Đang tải", Progress = 42 }; Assert(row.ProgressText == "42%"); row.Status = "Đang cài đặt"; Assert(row.IsInstalling && row.ProgressText == "Đang chạy…"); });
@@ -377,6 +395,31 @@ try
         var service = new DeploymentService(run: (command, _, _) => { commands.Add(command); return Task.FromResult(0); });
         service.RunAsync([], WindowsSettingsCatalog.Defaults().Where(s => s.Action == "Winget").ToArray(), Path.Combine(root, "system"), new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(_ => { }), default).GetAwaiter().GetResult();
         Assert(commands.Count == 1 && commands.Any(c => c.Contains("setting-Winget.ps1")) && outcomes.Any(e => e.Id == "windows:Winget" && e.Finished && !e.Failed));
+    });
+    Check("EVKey waits for its installer only, not the EVKey it leaves running", () => {
+        var apps = Catalog.Defaults();
+        Assert(apps.Single(a => a.Id == "evkey").WaitInstallerOnly && apps.Where(a => a.Id != "evkey").All(a => !a.WaitInstallerOnly));
+        Assert(new SettingsStore(Path.GetFullPath("ReleaseConfig")).Load(required: true).Single(a => a.Id == "evkey").WaitInstallerOnly);
+        var commands = new System.Collections.Concurrent.ConcurrentDictionary<string, string>();
+        using var client = new System.Net.Http.HttpClient(new FakeHttp());
+        var service = new DeploymentService(client, (command, _, _) => { commands[command.Contains("chrome") ? "chrome" : "evkey"] = command; return Task.FromResult(0); }, _ => false);
+        service.RunAsync(apps.Where(a => a.Id is "evkey" or "chrome").ToArray(), [], Path.Combine(root, "evkey"), new InlineProgress<DeploymentEvent>(_ => { }), new InlineProgress<string>(_ => { }), default).GetAwaiter().GetResult();
+        Assert(commands["evkey"].Contains("$p.WaitForExit()") && !commands["evkey"].Contains("-Wait ") && commands["chrome"].Contains("-Wait -PassThru"));
+        // A stand-in installer that starts a long-running child and exits, as EVKey's self-extractor does.
+        var standIn = System.Text.RegularExpressions.Regex.Replace(commands["evkey"], "-FilePath '[^']*' -ArgumentList '-s'",
+            "-FilePath 'cmd.exe' -ArgumentList '/c start \"\" /min ping -n 30 127.0.0.1' -WindowStyle Hidden");
+        Assert(standIn != commands["evkey"]);
+        var started = DateTime.Now; var clock = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var code = DeploymentService.RunPowerShellAsync(standIn, Path.GetTempPath(), new InlineProgress<string>(_ => { })).GetAwaiter().GetResult();
+            Assert(code == 0 && clock.Elapsed < TimeSpan.FromSeconds(15));
+        }
+        finally
+        {
+            foreach (var ping in System.Diagnostics.Process.GetProcessesByName("PING"))
+                try { if (ping.StartTime >= started.AddSeconds(-1)) ping.Kill(); } catch (Exception) { }
+        }
     });
     Check("All ready EXE installers and Windows settings start together", () =>
     {
@@ -702,6 +745,15 @@ var renderThread = new Thread(() =>
         if (vm.IsBusy || chromeRow.Status != "Hoàn tất · mô phỏng" || vm.HasStarted || vm.InstallFinished || !vm.InstallCommand.CanExecute(null) ||
             vm.ReadyApps.Where(r => r != chromeRow).Any(r => r.Status != "Sẵn sàng") || vm.Apps.Any(a => a.Status != "Sẵn sàng"))
             throw new Exception("Single install did not run on its own: " + chromeRow.Status);
+        var debloatRow = vm.ReadyApps.Single(r => r.Name == "Debloatware Windows");
+        window.Dispatcher.Invoke(() => vm.InstallOneCommand.Execute(debloatRow));
+        var debloatFrame = new System.Windows.Threading.DispatcherFrame();
+        var debloatStarted = DateTime.UtcNow;
+        var debloatTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+        debloatTimer.Tick += (_, _) => { if (!vm.IsBusy || (DateTime.UtcNow - debloatStarted).TotalSeconds > 10) debloatFrame.Continue = false; };
+        debloatTimer.Start(); System.Windows.Threading.Dispatcher.PushFrame(debloatFrame); debloatTimer.Stop();
+        if (vm.IsBusy || debloatRow.Status != "Hoàn tất · mô phỏng" || debloatRow.Progress != 100 || vm.HasStarted || vm.InstallFinished)
+            throw new Exception("Debloat must run on its own from the ready list: " + debloatRow.Status);
         Capture("ready-single-install.png");
         Console.WriteLine("PASS WPF single app install from the ready list");
         var installScroll = (System.Windows.Controls.ScrollViewer)window.FindName("InstallScroll");
@@ -728,7 +780,10 @@ var renderThread = new Thread(() =>
         timer.Tick += (_, _) => { if (!vm.IsBusy || (DateTime.UtcNow - started).TotalSeconds > 10) frame.Continue = false; };
         timer.Start(); System.Windows.Threading.Dispatcher.PushFrame(frame); timer.Stop();
         if (vm.IsBusy || !vm.Summary.StartsWith("Hoàn tất") || vm.Overall != 100 || vm.Apps.Any(a => a.Progress != 100)) throw new Exception("Preview command did not complete: " + vm.Summary);
-        if (vm.WindowsTaskDetails.Count != 11 || vm.WindowsTaskDetails.Any(t => t.Progress != 100) || vm.IsWindowsDetailsVisible) throw new Exception("Windows detail rows were not prepared correctly.");
+        if (vm.WindowsTaskDetails.Count != 11 || vm.WindowsTaskDetails.Any(t => t.Progress != 100 || t.Name == "Debloatware Windows") || vm.IsWindowsDetailsVisible) throw new Exception("Windows detail rows were not prepared correctly.");
+        var debloatCard = vm.ProgressRows.SingleOrDefault(row => row.Name == "Debloatware Windows");
+        if (debloatCard == null || debloatCard.IsWindowsSummary || debloatCard.Status != "Hoàn tất · mô phỏng" || debloatCard.Progress != 100 || vm.ProgressRows.Last().Name != "Windows Setting")
+            throw new Exception("Debloat must show as its own card, like an app being installed.");
         vm.ToggleWindowsDetailsCommand.Execute(null);
         if (!vm.IsWindowsDetailsVisible) throw new Exception("Windows detail list did not expand.");
         installScroll.ScrollToEnd(); Capture("windows-progress-expanded.png");
@@ -765,7 +820,7 @@ var renderThread = new Thread(() =>
         publicWindow.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
         publicWindow.UpdateLayout();
         var extensionList = (System.Windows.Controls.ItemsControl)publicWindow.FindName("ExtensionList");
-        if (!publicVm.IsExtend || !extensionList.IsVisible || extensionList.Items.Count != 3 ||
+        if (!publicVm.IsExtend || !extensionList.IsVisible || extensionList.Items.Count != 2 ||
             Enumerable.Range(0, extensionList.Items.Count).Any(i =>
                 FindChildren<System.Windows.Controls.Button>((System.Windows.DependencyObject)extensionList.ItemContainerGenerator.ContainerFromIndex(i))
                     .SingleOrDefault(button => button.Name == "RunButton")?.IsEnabled != true))
@@ -786,24 +841,34 @@ var renderThread = new Thread(() =>
         }
         var answers = new Queue<bool>(new[] { false, true });
         var extendVm = new MainViewModel(true, confirm: _ => answers.Dequeue());
-        var debloatItem = extendVm.Extensions[0];
-        publicWindow.Dispatcher.Invoke(() => extendVm.RunExtensionCommand.Execute(debloatItem));
-        if (extendVm.IsBusy || debloatItem.Status != "Sẵn sàng" || debloatItem.IsRunning)
+        var cppItem = extendVm.Extensions[0];
+        publicWindow.Dispatcher.Invoke(() => extendVm.RunExtensionCommand.Execute(cppItem));
+        if (extendVm.IsBusy || cppItem.Status != "Sẵn sàng" || cppItem.IsRunning)
             throw new Exception("Declining the confirmation must start nothing.");
-        publicWindow.Dispatcher.Invoke(() => extendVm.RunExtensionCommand.Execute(debloatItem));
-        if (!extendVm.IsBusy || !debloatItem.IsRunning || extendVm.InstallCommand.CanExecute(null) ||
-            extendVm.RunExtensionCommand.CanExecute(extendVm.Extensions[1]) || extendVm.InstallOneCommand.CanExecute(extendVm.ReadyApps[0]) ||
-            !extendVm.RunExtensionCommand.CanExecute(extendVm.Extensions[2]))
+        publicWindow.Dispatcher.Invoke(() => extendVm.RunExtensionCommand.Execute(cppItem));
+        if (!extendVm.IsBusy || !cppItem.IsRunning || extendVm.InstallCommand.CanExecute(null) ||
+            extendVm.RunExtensionCommand.CanExecute(cppItem) || extendVm.InstallOneCommand.CanExecute(extendVm.ReadyApps[0]) ||
+            !extendVm.RunExtensionCommand.CanExecute(extendVm.Extensions[1]))
             throw new Exception("A running add-on must lock every other install action but leave Share LAN available.");
         var extendFrame = new System.Windows.Threading.DispatcherFrame();
         var extendStarted = DateTime.UtcNow;
         var extendTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
         extendTimer.Tick += (_, _) => { if (!extendVm.IsBusy || (DateTime.UtcNow - extendStarted).TotalSeconds > 10) extendFrame.Continue = false; };
         extendTimer.Start(); System.Windows.Threading.Dispatcher.PushFrame(extendFrame); extendTimer.Stop();
-        if (extendVm.IsBusy || debloatItem.IsRunning || debloatItem.Status != "Hoàn tất" || debloatItem.Detail != "Đang áp dụng · mô phỏng" ||
-            !extendVm.InstallCommand.CanExecute(null) || !extendVm.RunExtensionCommand.CanExecute(extendVm.Extensions[1]) || answers.Count != 0)
-            throw new Exception($"The add-on run did not finish cleanly: {debloatItem.Status} / {debloatItem.Detail}.");
+        if (extendVm.IsBusy || cppItem.IsRunning || cppItem.Status != "Hoàn tất" || cppItem.Detail != "Đang áp dụng · mô phỏng" ||
+            !extendVm.InstallCommand.CanExecute(null) || !extendVm.RunExtensionCommand.CanExecute(cppItem) || answers.Count != 0)
+            throw new Exception($"The add-on run did not finish cleanly: {cppItem.Status} / {cppItem.Detail}.");
         Console.WriteLine("PASS WPF EXTEND run asks first, locks installs and reports its result");
+        var wpsVm = new MainViewModel(true) { SelectedSuite = "WPS" };
+        publicWindow.Dispatcher.Invoke(() => wpsVm.InstallCommand.Execute(null));
+        var wpsFrame = new System.Windows.Threading.DispatcherFrame();
+        var wpsStarted = DateTime.UtcNow;
+        var wpsTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+        wpsTimer.Tick += (_, _) => { if (!wpsVm.IsBusy || (DateTime.UtcNow - wpsStarted).TotalSeconds > 10) wpsFrame.Continue = false; };
+        wpsTimer.Start(); System.Windows.Threading.Dispatcher.PushFrame(wpsFrame); wpsTimer.Stop();
+        if (wpsVm.IsBusy || wpsVm.WindowsTaskDetails.Count != 12 || wpsVm.WindowsTaskDetails[0].Name != "Gỡ Microsoft Office" || wpsVm.WindowsTaskDetails[0].Progress != 100)
+            throw new Exception($"Installing WPS must first remove Microsoft Office: {string.Join(", ", wpsVm.WindowsTaskDetails.Select(t => t.Name))}.");
+        Console.WriteLine("PASS WPF WPS install removes Microsoft Office as a Windows task");
         publicVm.Page = 1;
         publicVm.Page = 3;
         publicWindow.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
@@ -811,10 +876,11 @@ var renderThread = new Thread(() =>
         if (publicVm.Page != 1 || ((System.Windows.Controls.ListBoxItem)navigation.Items[1]).Content?.ToString() != "INFORMATION")
             throw new Exception("Information must replace Driver.");
         var information = ((System.Windows.Controls.Grid)publicWindow.FindName("PageHost")).Children.OfType<MiniApps.InformationView>().Single();
-        if (!information.IsVisible || ((System.Windows.Controls.ItemsControl)information.FindName("InformationList")).Items.Count != 3)
-            throw new Exception($"Information did not display its preview data: visible={information.IsVisible}, rows={((System.Windows.Controls.ItemsControl)information.FindName("InformationList")).Items.Count}, status={((System.Windows.Controls.TextBlock)information.FindName("StatusText")).Text}.");
+        var sectionList = (System.Windows.Controls.ItemsControl)information.FindName("SectionList");
+        if (!information.IsVisible || sectionList.Items.Count != 6)
+            throw new Exception($"Information did not display its preview data: visible={information.IsVisible}, sections={sectionList.Items.Count}, status={((System.Windows.Controls.TextBlock)information.FindName("StatusText")).Text}.");
         Console.WriteLine("PASS Information navigation and embedded data view");
-        var heldRead = new TaskCompletionSource<IReadOnlyList<InformationRow>>();
+        var heldRead = new TaskCompletionSource<InformationReport>();
         var slowInformation = new MiniApps.InformationView(_ => heldRead.Task);
         var slowWindow = new System.Windows.Window { Content = slowInformation, Width = 1000, Height = 700, ShowInTaskbar = false, Left = -20000, Top = -20000 };
         slowWindow.Show();
@@ -848,17 +914,16 @@ var renderThread = new Thread(() =>
             throw new Exception("The data must replace the loader once the read completes.");
         slowWindow.Close(); slowInformation.Dispose();
         Console.WriteLine("PASS Information loader is centred, counts 1-99% and gives way to the data");
-        var layoutRows = InformationService.Parse("""
-            {"OS":"Windows 11 Pro","IsActivated":true,"Hostname":"MINI-PC","Model":"ThinkPad T14 Gen 5","Serial":"DEMO-123456","CPU":"Intel Core Ultra 7 155H · 16 cores / 22 threads","RAM":"32 GB DDR5 · 5600 MT/s\n├ Slot 1: 16 GB Samsung · SODIMM\n└ Slot 2: 16 GB Samsung · SODIMM","GraphicsCard":"Intel Arc Graphics · 128 MB\nNVIDIA GeForce RTX 4060 Laptop GPU · 8 GB · 115 W","Storage":"Samsung SSD 990 PRO 1 TB · NVMe\n├ C: Windows · 420 GB / 650 GB available\n└ D: Data · 180 GB / 300 GB available\nKingston SA400S37 480 GB · SATA SSD\n└ E: Backup · 210 GB / 447 GB available","Resolution":"2560 × 1600","RefreshRate":"165 Hz","DateTime":"2026-09-18 18:00:00","RamTotal":"32 GB","RamItems":[{"Slot":"DIMM 0","Capacity":"16 GB","Type":"DDR5","Speed":"5600 MT/s","Manufacturer":"Samsung","FormFactor":"SODIMM"},{"Slot":"DIMM 1","Capacity":"16 GB","Type":"DDR5","Speed":"5600 MT/s","Manufacturer":"Samsung","FormFactor":"SODIMM"}],"GpuItems":[{"Name":"Intel Arc Graphics","Kind":"Tích hợp","Memory":"128 MB"},{"Name":"NVIDIA GeForce RTX 4060 Laptop GPU","Kind":"Rời","Memory":"8 GB","Power":"115 W"}],"StorageItems":[{"Model":"Samsung SSD 990 PRO","Capacity":"1 TB","Connection":"NVMe","Partitions":[{"Letter":"C","FreeBytes":450971566080,"TotalBytes":697932185600},{"Letter":"D","FreeBytes":193273528320,"TotalBytes":322122547200}]},{"Model":"Kingston SA400S37","Capacity":"480 GB","Connection":"SATA","Partitions":[{"Letter":"E","FreeBytes":225485783040,"TotalBytes":479962595328}]}]}
-            """);
-        ((System.Windows.FrameworkElement)information.FindName("InformationContent")).DataContext = layoutRows.ToDictionary(row => row.Name, row => row.Value);
-        ((System.Windows.Controls.ItemsControl)information.FindName("InformationList")).ItemsSource = layoutRows.Where(row => row.Name is "CPU" or "RAM" or "Graphics Card");
-        ((System.Windows.Controls.ItemsControl)information.FindName("StorageList")).ItemsSource = layoutRows.Single(row => row.Name == "Storage").Disks;
-        if (layoutRows.Single(row => row.Name == "RAM").Ram.Count != 2 || layoutRows.Single(row => row.Name == "Graphics Card").Gpu.Count != 2)
+        var layout = InformationService.Parse(InformationService.PreviewJson);
+        information.Show(layout);
+        if (layout.Section("Bộ nhớ")!.Items.Count != 2 || layout.Section("Đồ họa")!.Items.Count != 2 ||
+            layout.Section("Bộ nhớ")!.Items[0].Title != "Khe 1 · 16 GB" || layout.Section("Bộ nhớ")!.Items[0].Detail != "Samsung · DDR5 · 5600 MT/s")
             throw new Exception("Structured hardware items were lost.");
-        var fixtureDisks = layoutRows.Single(row => row.Name == "Storage").Disks;
+        var fixtureDisks = layout.Section("Lưu trữ")!.Items;
         if (fixtureDisks.Count != 2 || fixtureDisks[0].Partitions.Count != 2 || Math.Abs(fixtureDisks[0].Partitions[0].UsedPercent - 230d / 650 * 100) > 0.01)
             throw new Exception("Disk partitions or capacity calculations are incorrect.");
+        if (fixtureDisks[0].Detail != "1 TB · NVMe" || layout.Section("Vi xử lý")!.Items[0].Detail != "")
+            throw new Exception("Component details are wrong: " + fixtureDisks[0].Detail);
         if (new StorageVolume("X", 20, 10).HasCapacity || new StorageVolume("X", null, 10).HasCapacity || new StorageVolume("X", 0, 0).HasCapacity)
             throw new Exception("Invalid capacity must not display a usage bar.");
         if (new StorageVolume("X", 0, 10).UsedPercent != 100 || new StorageVolume("X", 10, 10).UsedPercent != 0)
@@ -899,13 +964,20 @@ var renderThread = new Thread(() =>
                 foreach (var deeper in DescendantsOf<T>(child)) yield return deeper;
             }
         }
-        // RAM rows: values hug their content, stay aligned, and leave the rest of the line empty.
-        var ramRows = DescendantsOf<System.Windows.Controls.ItemsControl>(information).Single(control => control.Name == "RamRows");
-        var ramGrids = DescendantsOf<System.Windows.Controls.Grid>(ramRows).Where(grid => grid.ColumnDefinitions.Count == 6).ToList();
-        if (ramGrids.Count != 2 || ramGrids.Any(grid => grid.ColumnDefinitions[5].ActualWidth < 100) ||
-            Enumerable.Range(0, 5).Any(column => Math.Abs(ramGrids[0].ColumnDefinitions[column].ActualWidth - ramGrids[1].ColumnDefinitions[column].ActualWidth) > 0.5))
-            throw new Exception("RAM values must sit close together in aligned columns.");
-        Console.WriteLine("PASS RAM rows are compact and aligned");
+        // Short properties sit two to a line at the default width; a machine that reports less shows fewer lines, not dashes.
+        publicWindow.Width = 1120; publicWindow.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle); publicWindow.UpdateLayout();
+        var firstFacts = DescendantsOf<System.Windows.Controls.WrapPanel>(information).First(panel => panel.Children.Count == 3);
+        var factTops = firstFacts.Children.Cast<System.Windows.FrameworkElement>().Select(fact => Math.Round(fact.TranslatePoint(new System.Windows.Point(), firstFacts).Y)).ToList();
+        if (factTops[0] != factTops[1] || factTops[2] <= factTops[0])
+            throw new Exception($"Information facts must sit two per line at the default width: panel={firstFacts.ActualWidth}, tops={string.Join(",", factTops)}.");
+        var sparse = InformationService.Parse("""{"OS":"Windows 10 Pro","CPU":"Intel Core i5","Serial":"S1","Manufacturer":"Dell Inc."}""");
+        if (sparse.Section("Bộ nhớ")!.Facts.Any(fact => fact.Label == "Loại") || sparse.Section("Bộ nhớ")!.Facts.Single().Value != "—" ||
+            sparse.Section("Lưu trữ")!.Items.Single().Title != "—" || sparse.Maker != "Dell Inc." ||
+            sparse.Section("Hệ điều hành")!.Facts[1] is not { Value: "Chưa xác nhận kích hoạt", Tone: "warn" } || sparse.Section("Hệ điều hành")!.Facts[2].Value != "—")
+            throw new Exception("Unknown optional values must be left out and an unconfirmed licence flagged.");
+        if (layout.Section("Hệ điều hành")!.Facts[1].Tone != "good" || !layout.ToText().Contains("Khe 2 · 16 GB · Samsung · DDR5 · 5600 MT/s"))
+            throw new Exception("Status tone or the copied report is wrong.");
+        Console.WriteLine("PASS Information facts sit two per line and unknown values are left out");
         // The window fits the Information data, and gives the previous height back on other pages.
         var informationScroll = (System.Windows.Controls.ScrollViewer)information.FindName("InformationScroll");
         publicWindow.FitInformationHeight();

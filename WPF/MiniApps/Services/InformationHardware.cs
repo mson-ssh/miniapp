@@ -8,8 +8,6 @@ internal sealed record RamModule(string Slot, string Capacity, string Specificat
     public string Type { get; init; } = "—";
     public string Speed { get; init; } = "—";
     public string FormFactor { get; init; } = "—";
-    public string CompactCapacity => Capacity.Replace(" ", "");
-    public string DisplaySpeed => Speed.Replace(" MT/s", "Mhz").Replace(" MHz", "Mhz");
 }
 internal sealed record GraphicsAdapter(string Name, string Kind, string Memory, string Power);
 internal sealed record StorageDevice(string Model, string Capacity, string Connection, IReadOnlyList<StorageVolume> Partitions);

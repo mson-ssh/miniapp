@@ -20,7 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Scripts\Configure-Windows.ps1;Scripts\Update-Winget.ps1" CopyToOutputDirectory="PreserveNewest" />
-    <EmbeddedResource Include="Scripts\Update-Winget.ps1;Scripts\Invoke-Win11Debloat.ps1;Scripts\Install-CppEnvironment.ps1;Scripts\Enable-Smb.ps1;Scripts\Split-Disk.ps1" />
+    <EmbeddedResource Include="Scripts\Update-Winget.ps1;Scripts\Invoke-Win11Debloat.ps1;Scripts\Install-CppEnvironment.ps1;Scripts\Enable-Smb.ps1;Scripts\Split-Disk.ps1;Scripts\Remove-Office.ps1" />
     <EmbeddedResource Include="..\tool\Share LAN\Share-LAN.ps1" LogicalName="MiniApps.Scripts.Share-LAN.ps1" />
     <EmbeddedResource Include="..\tool\Info\info.ps1" LogicalName="MiniApps.Information.ps1" />
   </ItemGroup>

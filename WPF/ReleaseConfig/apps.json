@@ -7,7 +7,8 @@
       "Url": "https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/EVKey.exe",
       "Arguments": "-s",
       "Sha256": "",
-      "Suite": ""
+      "Suite": "",
+      "WaitInstallerOnly": true
     },
     {
       "Id": "chrome",

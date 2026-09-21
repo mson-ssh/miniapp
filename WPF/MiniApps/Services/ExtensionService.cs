@@ -16,7 +16,6 @@ public sealed class ExtensionService(Func<string, string, IProgress<string>, Tas
     // The script to run first, then any script it calls from its own folder.
     internal static IReadOnlyList<string> ScriptsFor(string extensionId) => extensionId switch
     {
-        "debloat" => ["Invoke-Win11Debloat.ps1"],
         "cpp" => ["Install-CppEnvironment.ps1", "Update-Winget.ps1"],
         "sharelan" => ["Share-LAN.ps1"],
         _ => throw new ArgumentException("Phần mở rộng không được hỗ trợ: " + extensionId, nameof(extensionId))
@@ -116,8 +115,8 @@ public sealed class ExtensionService(Func<string, string, IProgress<string>, Tas
         }
         var output = ReadAsync(process.StandardOutput);
         var error = ReadAsync(process.StandardError);
-        // No timeout and no kill: Debloat and the C++ toolchain take minutes, and stopping
-        // either half-way leaves the machine in a worse state than letting it finish.
+        // No timeout and no kill: the C++ toolchain takes minutes, and stopping
+        // it half-way leaves the machine in a worse state than letting it finish.
         await ProcessCompatibility.WaitForExitAsync(process);
         await Task.WhenAll(output, error);
         return process.ExitCode;

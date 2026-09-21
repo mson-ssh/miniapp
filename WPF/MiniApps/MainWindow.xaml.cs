@@ -13,7 +13,7 @@ public partial class MainWindow : Window
         InitializeComponent(); this.model = model; DataContext = model;
         defaultMinHeight = MinHeight;
         var information = this.information = new InformationView(model.IsPreview
-            ? _ => Task.FromResult(Services.InformationService.Parse("{\"OS\":\"Windows · mô phỏng\",\"CPU\":\"CPU · mô phỏng\",\"RAM\":\"16 GB · mô phỏng\",\"Manufacturer\":\"Dell\",\"Serial\":\"DEMO-123456\"}"))
+            ? _ => Task.FromResult(Services.InformationService.Parse(Services.InformationService.PreviewJson))
             : null, preview: model.IsPreview) { Visibility = model.Page == 1 ? Visibility.Visible : Visibility.Collapsed };
         PageHost.Children.Add(information);
         PropertyChangedEventHandler onPageChanged = (_, e) =>

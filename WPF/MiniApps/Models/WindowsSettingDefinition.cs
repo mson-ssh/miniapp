@@ -29,6 +29,7 @@ public static class WindowsSettingsCatalog
         new("Power", "Không tắt màn hình / sleep"), new("PasswordExpiry", "Mật khẩu không hết hạn"),
         new("Winget", "Winget (update)"), new("InfoExe", "Info.exe"),
         new("ExecutionPolicy", "Execution Policy: Bypass"), new("Smb", "SMB chia sẻ mạng"), new("Disk", "Chia ổ đĩa"),
+        new("Win11Debloat", "Debloatware Windows"), new("RemoveOffice", "Gỡ Microsoft Office"),
         new("Custom", "PowerShell tùy chỉnh")
     ];
     public static List<WindowsSettingDefinition> Defaults() =>
@@ -43,8 +44,12 @@ public static class WindowsSettingsCatalog
         Make("InfoExe", "Info.exe", "Tải info.exe về Desktop; không tự động mở ứng dụng."),
         Make("Smb", "SMB chia sẻ mạng", "Vào được NAS, máy in, thư mục share (kể cả không mật khẩu và thiết bị cũ, bật SMB1 client); bật dò tìm mạng và chia sẻ file trên mạng Private. Có thể cần khởi động lại."),
         Make("Disk", "Chia ổ đĩa", "Chia ổ hệ thống theo dung lượng: 256 GB thêm D: 50 GB; 512 GB thêm D: 200 GB; 1 TB thêm D: 400 GB và E: 200 GB. Bỏ qua ổ trên 1100 GB hoặc máy đã có D:/E:. Tắt BitLocker và Hibernate trên C: trước khi chia."),
-        Make("ExecutionPolicy", "Execution Policy: Bypass", "Cho phép chạy mọi script PowerShell trên máy (phạm vi LocalMachine), không chặn hay hỏi xác nhận.")
+        Make("ExecutionPolicy", "Execution Policy: Bypass", "Cho phép chạy mọi script PowerShell trên máy (phạm vi LocalMachine), không chặn hay hỏi xác nhận."),
+        Make("Win11Debloat", "Debloatware Windows", "Win11Debloat 2026.08.24 ở chế độ mặc định: tạo điểm khôi phục, gỡ ứng dụng cài sẵn, tắt quảng cáo, gợi ý, Copilot, Recall và Widgets, khởi động lại Explorer. Có thể mất 5–15 phút.")
     ];
+    // Not a configured setting: added to the run when another office suite replaces Microsoft Office.
+    public static WindowsSettingDefinition RemoveOffice() =>
+        Make("RemoveOffice", "Gỡ Microsoft Office", "Gỡ Microsoft Office đang có trên máy trước khi cài bộ văn phòng khác.");
     private static WindowsSettingDefinition Make(string action, string name, string description) => new()
     { Id = action, Action = action, Name = name, Description = description, Script = DefaultScript(action) };
     public static string DefaultScript(string action) => action switch
@@ -77,6 +82,8 @@ public static class WindowsSettingsCatalog
         "Winget" => ReadScriptResource("Update-Winget.ps1"),
         "Smb" => ReadScriptResource("Enable-Smb.ps1"),
         "Disk" => ReadScriptResource("Split-Disk.ps1"),
+        "Win11Debloat" => ReadScriptResource("Invoke-Win11Debloat.ps1"),
+        "RemoveOffice" => ReadScriptResource("Remove-Office.ps1"),
         // -Force: without it Set-ExecutionPolicy asks for confirmation, which fails when nobody can answer.
         "ExecutionPolicy" => "Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope LocalMachine -Force -ErrorAction Stop",
         "InfoExe" => """

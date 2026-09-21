@@ -1,4 +1,4 @@
-﻿# MiniApps EXTEND: run Win11Debloat (https://github.com/Raphire/Win11Debloat) in its default mode.
+﻿# MiniApps Windows setting "Debloatware Windows": run Win11Debloat (https://github.com/Raphire/Win11Debloat) in its default mode.
 #
 # Pinned to one release and checked by SHA-256, so every machine runs the same reviewed code.
 # To move to a newer release, change $Version and $Sha256 together.

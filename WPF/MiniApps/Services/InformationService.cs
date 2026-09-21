@@ -4,27 +4,54 @@ using System.Text.Json;
 
 namespace MiniApps.Services;
 
-internal sealed record InformationRow(string Name, string Value)
+// Tone marks a value worth noticing: "good" or "warn"; empty is neutral.
+internal sealed record InformationFact(string Label, string Value, string Tone = "");
+internal sealed record InformationItem(string Title, string Detail, string Tone = "")
 {
-    public string Summary => Value.Split('\n')[0].TrimEnd('\r');
-    public string Details => Value.IndexOf('\n') is var index && index >= 0 ? Value.Substring(index + 1).TrimEnd() : "";
-    public string Total { get; init; } = "—";
-    public string DriverUrl { get; init; } = "";
-    public IReadOnlyList<RamModule> Ram { get; init; } = Array.Empty<RamModule>();
-    public IReadOnlyList<GraphicsAdapter> Gpu { get; init; } = Array.Empty<GraphicsAdapter>();
-    public IReadOnlyList<StorageDevice> Disks { get; init; } = Array.Empty<StorageDevice>();
-    private string RamValues(Func<RamModule, string> selector) => string.Join(" / ", Ram.Select(selector).Distinct());
-    public string RamSummary => Ram.Count == 0 ? Total.Replace(" ", "") :
-        string.Join("  ", RamValues(module => module.FormFactor), RamValues(module => module.Type), Total.Replace(" ", ""),
-            RamValues(module => module.Manufacturer), RamValues(module => module.DisplaySpeed));
-    public IEnumerable<RamDisplayRow> RamDisplayRows => Ram.Select((module, index) => new RamDisplayRow($"SLOT {index + 1}:",
-        module.Type, module.CompactCapacity, module.Manufacturer, module.DisplaySpeed));
+    public IReadOnlyList<StorageVolume> Partitions { get; init; } = Array.Empty<StorageVolume>();
 }
-internal sealed record RamDisplayRow(string Slot, string Type, string Capacity, string Manufacturer, string Speed);
+internal sealed record InformationSection(string Title, IReadOnlyList<InformationFact> Facts, IReadOnlyList<InformationItem> Items);
+
+internal sealed class InformationReport
+{
+    public string Model { get; init; } = "—";
+    public string Maker { get; init; } = "—";
+    public string Serial { get; init; } = "—";
+    public string DriverUrl { get; init; } = "";
+    public string ReadAt { get; init; } = "—";
+    public IReadOnlyList<InformationSection> Sections { get; init; } = Array.Empty<InformationSection>();
+    public InformationSection? Section(string title) => Sections.FirstOrDefault(section => section.Title == title);
+    public string ToText()
+    {
+        var text = new StringBuilder().AppendLine($"{Model} · {Maker}").AppendLine($"Serial: {Serial}");
+        foreach (var section in Sections)
+        {
+            text.AppendLine().AppendLine(section.Title.ToUpperInvariant());
+            foreach (var fact in section.Facts) text.AppendLine($"{fact.Label}: {fact.Value}");
+            foreach (var item in section.Items)
+            {
+                text.AppendLine(item.Detail.Length == 0 ? item.Title : $"{item.Title} · {item.Detail}");
+                foreach (var part in item.Partitions) text.AppendLine($"  {part.Letter}: {part.CapacityText}");
+            }
+        }
+        return text.AppendLine().Append("Thời điểm đọc: ").Append(ReadAt).ToString();
+    }
+}
 
 internal static class InformationService
 {
-    internal static async Task<IReadOnlyList<InformationRow>> ReadAsync(CancellationToken token)
+    // Shown by --preview and used by the tests: a full machine, no hardware is read.
+    internal const string PreviewJson = """
+        {"OS":"Windows 11 Pro","IsActivated":true,"Hostname":"MINI-PC","Manufacturer":"LENOVO","Model":"ThinkPad T14 Gen 5","Serial":"DEMO-123456",
+        "CPU":"Intel Core Ultra 7 155H","RamTotal":"32 GB",
+        "RamItems":[{"Slot":"DIMM 0","Capacity":"16 GB","Type":"DDR5","Speed":"5600 MT/s","Manufacturer":"Samsung","FormFactor":"SODIMM"},{"Slot":"DIMM 1","Capacity":"16 GB","Type":"DDR5","Speed":"5600 MT/s","Manufacturer":"Samsung","FormFactor":"SODIMM"}],
+        "GpuItems":[{"Name":"Intel Arc Graphics","Kind":"Tích hợp","Memory":"128 MB"},{"Name":"NVIDIA GeForce RTX 4060 Laptop GPU","Kind":"Rời","Memory":"8 GB","Power":"115 W"}],
+        "StorageItems":[{"Model":"Samsung SSD 990 PRO","Capacity":"1 TB","Connection":"NVMe","Partitions":[{"Letter":"C","FreeBytes":450971566080,"TotalBytes":697932185600},{"Letter":"D","FreeBytes":193273528320,"TotalBytes":322122547200}]},
+          {"Model":"Kingston SA400S37","Capacity":"480 GB","Connection":"SATA","Partitions":[{"Letter":"E","FreeBytes":225485783040,"TotalBytes":479962595328}]}],
+        "Resolution":"2560 × 1600","RefreshRate":"165 Hz","DateTime":"2026-09-21 18:00:00"}
+        """;
+
+    internal static async Task<InformationReport> ReadAsync(CancellationToken token)
     {
         using var resource = typeof(InformationService).Assembly.GetManifestResourceStream("MiniApps.Information.ps1")
             ?? throw new InvalidOperationException("Thiếu script Information.");
@@ -62,30 +89,46 @@ internal static class InformationService
         return Parse(json);
     }
 
-    internal static IReadOnlyList<InformationRow> Parse(string json)
+    internal static InformationReport Parse(string json)
     {
         using var document = JsonDocument.Parse(json);
         var data = document.RootElement;
-        var fields = new[] { ("OS", "Windows"), ("Hostname", "Tên máy"), ("Model", "Model"),
-            ("Serial", "Serial"), ("CPU", "CPU"), ("RAM", "RAM"), ("GraphicsCard", "Graphics Card"),
-            ("Storage", "Storage"), ("Resolution", "Độ phân giải"), ("RefreshRate", "Tần số quét tối đa"), ("DateTime", "Thời điểm đọc") };
         if (data.ValueKind != JsonValueKind.Object || !data.TryGetProperty("OS", out _))
             throw new InvalidDataException("Dữ liệu Information không hợp lệ.");
-        var rows = new List<InformationRow>();
-        foreach (var (key, name) in fields)
+        string Text(string name) => InformationHardware.Text(data, name);
+        var activated = data.TryGetProperty("IsActivated", out var active) && active.ValueKind == JsonValueKind.True;
+        var activation = new InformationFact("Bản quyền", activated ? "Đã kích hoạt" : "Chưa xác nhận kích hoạt", activated ? "good" : "warn");
+        var ram = InformationHardware.Ram(data);
+        var gpus = InformationHardware.Gpu(data);
+        var disks = InformationHardware.Disks(data);
+        var sections = new List<InformationSection>
         {
-            var value = data.TryGetProperty(key, out var item) && item.ValueKind == JsonValueKind.String ? item.GetString() : null;
-            rows.Add(new(name, string.IsNullOrWhiteSpace(value) ? "Không xác định" : value!)
-            {
-                Total = key == "RAM" ? InformationHardware.Text(data, "RamTotal") : "—",
-                DriverUrl = key == "Serial" ? DeviceInfoService.Resolve("", InformationHardware.Text(data, "Manufacturer"), "", value ?? "").DriverUrl : "",
-                Ram = key == "RAM" ? InformationHardware.Ram(data) : Array.Empty<RamModule>(),
-                Gpu = key == "GraphicsCard" ? InformationHardware.Gpu(data) : Array.Empty<GraphicsAdapter>(),
-                Disks = key == "Storage" ? InformationHardware.Disks(data) : Array.Empty<StorageDevice>()
-            });
-            if (key == "OS") rows.Add(new("Bản quyền Windows", data.TryGetProperty("IsActivated", out var active) && active.ValueKind == JsonValueKind.True
-                ? "Đã kích hoạt" : "Chưa xác nhận kích hoạt"));
-        }
-        return rows;
+            new("Hệ điều hành", [new("Phiên bản", Text("OS")), activation, new("Tên máy", Text("Hostname"))], []),
+            new("Vi xử lý", [], [new(Text("CPU"), "")]),
+            new("Bộ nhớ", Facts(
+                ("Dung lượng", Text("RamTotal"), true),
+                ("Loại", Join(" · ", Distinct(ram.Select(module => module.Type)), Distinct(ram.Select(module => module.Speed)), Distinct(ram.Select(module => module.FormFactor))), false)),
+                ram.Select((module, index) => new InformationItem($"Khe {index + 1} · {module.Capacity}", Detail(module.Manufacturer, module.Type, module.Speed))).ToArray()),
+            new("Đồ họa", [], gpus.Count > 0 ? gpus.Select(gpu => new InformationItem(gpu.Name, Detail(gpu.Kind, gpu.Memory, gpu.Power))).ToArray() : [new InformationItem("—", "")]),
+            new("Lưu trữ", [], disks.Count > 0
+                ? disks.Select(disk => new InformationItem(disk.Model, Detail(disk.Capacity, disk.Connection)) { Partitions = disk.Partitions }).ToArray()
+                : [new InformationItem("—", "")]),
+            new("Màn hình", [new("Độ phân giải tối đa", Text("Resolution")), new("Tần số quét tối đa", Text("RefreshRate"))], [])
+        };
+        var serial = Text("Serial");
+        return new InformationReport
+        {
+            Model = Text("Model"), Maker = Text("Manufacturer"), Serial = serial,
+            DriverUrl = DeviceInfoService.Resolve("", Text("Manufacturer"), "", serial).DriverUrl,
+            ReadAt = Text("DateTime"), Sections = sections
+        };
     }
+
+    // An optional fact is left out when unknown; a required one shows "—".
+    private static IReadOnlyList<InformationFact> Facts(params (string Label, string Value, bool Required)[] facts) =>
+        facts.Where(fact => fact.Required || fact.Value != "—").Select(fact => new InformationFact(fact.Label, fact.Value)).ToArray();
+    private static string Join(string separator, params string[] parts) =>
+        string.Join(separator, parts.Where(part => part.Length > 0 && part != "—")) is { Length: > 0 } joined ? joined : "—";
+    private static string Detail(params string[] parts) => Join(" · ", parts) is var detail && detail != "—" ? detail : "";
+    private static string Distinct(IEnumerable<string> values) => Join(" / ", values.Distinct().ToArray());
 }

@@ -96,6 +96,8 @@ public sealed class MainViewModel : Observable
         set { if (CanChooseSuite && Set(ref selectedSuite, value ?? "")) RebuildRows(); }
     }
     public bool CanChooseSuite => IsIdle && !HasStarted;
+    // Any suite other than Microsoft Office takes its place, so the Office already installed is removed.
+    public bool RemovesOffice => SelectedSuite is "WPS" or "OnlyOffice" or "LibreOffice";
     public string Machine => $"{Environment.MachineName}  ·  Windows {WindowsCompatibility.CurrentBuild}  ·  {System.Runtime.InteropServices.RuntimeInformation.OSArchitecture}";
     public string RuntimeLabel
     {
@@ -124,15 +126,6 @@ public sealed class MainViewModel : Observable
     // Optional add-ons on the EXTEND page, each run on its own after the technician confirms.
     public IReadOnlyList<ExtensionItem> Extensions { get; } =
     [
-        new("debloat", "Debloatware Windows",
-            "Chạy Win11Debloat 2026.08.24 ở chế độ mặc định: gỡ ứng dụng cài sẵn, tắt quảng cáo, gợi ý, Copilot và Widgets. Có tạo điểm khôi phục.",
-            "Chạy",
-            "Chạy Win11Debloat 2026.08.24 ở chế độ mặc định?\n\n" +
-            "• Tạo điểm khôi phục hệ thống.\n" +
-            "• Gỡ bộ ứng dụng cài sẵn mặc định cho mọi tài khoản.\n" +
-            "• Tắt telemetry, quảng cáo, gợi ý, Copilot, Recall, Widgets…\n" +
-            "• Khởi động lại Explorer.\n\n" +
-            "Có thể mất 5–15 phút và không dừng được giữa chừng."),
         new("cpp", "Môi trường C++",
             "VS Code, MSYS2, bộ biên dịch MinGW-w64 (gcc, g++, gdb) và extension C/C++; thêm bộ biên dịch vào PATH của máy.",
             "Cài đặt",
@@ -153,7 +146,7 @@ public sealed class MainViewModel : Observable
     public string SingleInstallIcon => "M 8,0 L 12,0 L 12,8 L 16,8 L 10,14 L 4,8 L 8,8 Z M 0,13 L 3,13 L 3,17 L 17,17 L 17,13 L 20,13 L 20,20 L 0,20 Z";
     public double SingleInstallIconSize => 18;
     public string SingleInstallIconColor => "#111111";
-    public string SingleInstallHint => "Chọn bộ văn phòng ở danh sách cạnh nút Cài đặt (Null: không cài bộ nào). Nút tải xuống ở từng ứng dụng để cài riêng ứng dụng đó.";
+    public string SingleInstallHint => "Chọn bộ văn phòng ở danh sách cạnh nút Cài đặt (Null: không cài bộ nào); chọn WPS, OnlyOffice hoặc Libre Office sẽ gỡ Microsoft Office đang có trên máy. Nút tải xuống ở từng ứng dụng để cài riêng ứng dụng đó.";
     private bool busy;
     public bool IsBusy { get => busy; private set { if (Set(ref busy, value)) { Raise(nameof(IsIdle)); Raise(nameof(ShowInstallCancel)); Raise(nameof(CanChooseSuite)); Refresh(); } } }
     public bool IsIdle => !IsBusy;
@@ -170,11 +163,20 @@ public sealed class MainViewModel : Observable
     public bool IsWindowsDetailsVisible { get => isWindowsDetailsVisible; private set => Set(ref isWindowsDetailsVisible, value); }
     private string summary = "Sẵn sàng cài toàn bộ danh sách đã cấu hình.";
     public string Summary { get => summary; private set => Set(ref summary, value); }
-    private string details = "";
-    public string Details { get => details; private set => Set(ref details, value); }
+    // Installers and Debloat print thousands of lines; appending to one growing string copied it every time.
+    private readonly System.Text.StringBuilder details = new();
+    public string Details => details.ToString();
     private double overall;
     public double Overall { get => overall; private set => Set(ref overall, value); }
-    public string SelectionText => $"{Apps.Count} ứng dụng · {WindowsOptions.Count} thiết lập Windows";
+    // Debloat is counted with the apps, matching the card it gets in the progress list.
+    public string SelectionText
+    {
+        get
+        {
+            var appLike = WindowsOptions.Count(option => IsAppLikeTask(option.Definition));
+            return $"{Apps.Count + appLike} ứng dụng · {WindowsOptions.Count - appLike} thiết lập Windows";
+        }
+    }
     public RelayCommand InstallCommand { get; }
     public RelayCommand CancelCommand { get; }
     public RelayCommand<AppRow> InstallOneCommand { get; }
@@ -209,6 +211,9 @@ public sealed class MainViewModel : Observable
         ToggleWindowsDetailsCommand = new RelayCommand(() => IsWindowsDetailsVisible = !IsWindowsDetailsVisible, () => WindowsTaskDetails.Count > 0);
         foreach (var app in catalog) ReadyApps.Add(new AppRow(app));
         RebuildWindows();
+        // Debloat is listed with the apps too, so it can also be run on its own.
+        foreach (var option in WindowsOptions.Where(option => IsAppLikeTask(option.Definition)))
+            ReadyApps.Add(new AppRow(new AppDefinition { Id = option.Definition.TaskId, Name = option.Name }));
         RebuildRows();
     }
     private void Refresh() { Raise(nameof(SelectionText)); InstallCommand?.Refresh(); CancelCommand?.Refresh(); InstallOneCommand?.Refresh(); RunExtensionCommand?.Refresh(); }
@@ -222,6 +227,7 @@ public sealed class MainViewModel : Observable
         }
         Refresh();
     }
+    private static bool IsAppLikeTask(WindowsSettingDefinition definition) => definition.Action == "Win11Debloat";
     public static bool IsDebloat(WindowsSettingDefinition definition) =>
         definition.Id.Equals("Debloat", StringComparison.OrdinalIgnoreCase) ||
         definition.Action.Equals("Debloat", StringComparison.OrdinalIgnoreCase);
@@ -245,7 +251,7 @@ public sealed class MainViewModel : Observable
         Summary = "Sẵn sàng cài toàn bộ danh sách đã cấu hình.";
         Refresh();
     }
-    private void Log(string line) => Details += $"[{DateTime.Now:HH:mm:ss}] {line}\n";
+    private void Log(string line) => details.Append('[').Append(DateTime.Now.ToString("HH:mm:ss")).Append("] ").Append(line).Append('\n');
     private bool EnsureAdministrator()
     {
         if (preview) return true;
@@ -290,7 +296,13 @@ public sealed class MainViewModel : Observable
                 });
                 await Task.WhenAll(previewApps.Concat(previewSettings));
             }
-            else await new DeploymentService().RunAsync(apps, options, workDir, events, new Progress<string>(Log), token);
+            else
+            {
+                // Created here, so progress still reaches the window; the work itself (downloads,
+                // SHA-256 of large installers, detection) runs off the UI thread and cannot stall it.
+                var log = new Progress<string>(Log);
+                await Task.Run(() => new DeploymentService().RunAsync(apps, options, workDir, events, log, token));
+            }
             // Drain progress callbacks before the caller composes its final summary.
             await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Background);
         }
@@ -317,19 +329,25 @@ public sealed class MainViewModel : Observable
     private async Task InstallAsync()
     {
         var options = WindowsOptions.Select(o => o.Definition).ToList();
+        if (RemovesOffice && !options.Any(o => o.Id.Equals("RemoveOffice", StringComparison.OrdinalIgnoreCase)))
+            options.Insert(0, WindowsSettingsCatalog.RemoveOffice());
         if (!EnsureAdministrator()) return;
         RebuildRows();
         var selected = Apps.Select(a => a.Definition).ToList();
         using var deploymentLock = new Mutex(false, DeploymentService.DeploymentLockName);
         if (!TryAcquire(deploymentLock)) return;
-        IsBusy = true; IsInstallRunning = true; Details = ""; Overall = 0;
+        IsBusy = true; IsInstallRunning = true; details.Clear(); Overall = 0;
         HasStarted = true;
-        if (options.Count > 0)
+        // Debloat runs for minutes and changes the machine the most, so it gets its own card like an app.
+        foreach (var option in options.Where(IsAppLikeTask))
+            ProgressRows.Add(new AppRow(new AppDefinition { Id = option.TaskId, Name = option.Name }) { Status = "Chờ chạy" });
+        var settings = options.Where(option => !IsAppLikeTask(option)).ToList();
+        if (settings.Count > 0)
         {
-            var windowsRow = new AppRow(new AppDefinition { Id = "windows:summary", Name = "Windows Setting" }) { Status = $"Chờ áp dụng · 0/{options.Count}" };
+            var windowsRow = new AppRow(new AppDefinition { Id = "windows:summary", Name = "Windows Setting" }) { Status = $"Chờ áp dụng · 0/{settings.Count}" };
             SystemTasks.Add(windowsRow);
             ProgressRows.Add(windowsRow);
-            foreach (var option in options)
+            foreach (var option in settings)
                 WindowsTaskDetails.Add(new AppRow(new AppDefinition { Id = option.TaskId, Name = option.Name }) { Status = "Chờ áp dụng" });
             ToggleWindowsDetailsCommand.Refresh();
         }
@@ -338,13 +356,13 @@ public sealed class MainViewModel : Observable
         var total = selected.Count + options.Count;
         var finished = new HashSet<string>(); var failed = new HashSet<string>();
         var smartSkipped = new HashSet<string>(); var unverified = new HashSet<string>();
-        var windowsIds = options.Select(o => o.TaskId).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var windowsNames = options.ToDictionary(o => o.TaskId, o => o.Name, StringComparer.OrdinalIgnoreCase);
-        var windowsProgress = new WindowsProgressTracker(options.Count);
+        var windowsIds = settings.Select(o => o.TaskId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var windowsNames = settings.ToDictionary(o => o.TaskId, o => o.Name, StringComparer.OrdinalIgnoreCase);
+        var windowsProgress = new WindowsProgressTracker(settings.Count);
         var events = new Progress<DeploymentEvent>(e =>
         {
             var isWindows = windowsIds.Contains(e.Id);
-            var row = isWindows ? SystemTasks.FirstOrDefault() : Apps.FirstOrDefault(a => a.Definition.Id == e.Id);
+            var row = isWindows ? SystemTasks.FirstOrDefault() : ProgressRows.FirstOrDefault(a => a.Definition.Id == e.Id);
             if (isWindows)
             {
                 var detailRow = WindowsTaskDetails.FirstOrDefault(a => a.Definition.Id == e.Id);
@@ -383,14 +401,15 @@ public sealed class MainViewModel : Observable
             deploymentLock.ReleaseMutex();
         }
     }
-    // Installs one app from the ready list: no Office/WPS question and no Windows settings.
+    // Installs one app from the ready list, or runs Debloat alone: no office suite and no other Windows settings.
     private async Task InstallOneAsync(AppRow row)
     {
+        var setting = WindowsOptions.Select(option => option.Definition).FirstOrDefault(definition => definition.TaskId == row.Definition.Id);
         if (IsBusy || !EnsureAdministrator()) return;
         using var deploymentLock = new Mutex(false, DeploymentService.DeploymentLockName);
         if (!TryAcquire(deploymentLock)) return;
         IsBusy = true; IsInstallRunning = true;
-        row.Status = "Chờ tải"; row.Progress = 0;
+        row.Status = setting == null ? "Chờ tải" : "Chờ chạy"; row.Progress = 0;
         cancellation = new CancellationTokenSource();
         var events = new Progress<DeploymentEvent>(e =>
         {
@@ -400,8 +419,8 @@ public sealed class MainViewModel : Observable
         });
         try
         {
-            Summary = preview ? $"Đang mô phỏng cài {row.Name}…" : $"Đang cài {row.Name}…";
-            await RunDeploymentAsync([row.Definition], [], events, cancellation.Token);
+            Summary = preview ? $"Đang mô phỏng {row.Name}…" : setting == null ? $"Đang cài {row.Name}…" : $"Đang chạy {row.Name}…";
+            await RunDeploymentAsync(setting == null ? [row.Definition] : [], setting == null ? [] : [setting], events, cancellation.Token);
             Summary = cancellation.IsCancellationRequested ? "Đã dừng · bộ cài đang chạy đã kết thúc an toàn." : $"{row.Name}: {row.Status}";
         }
         catch (OperationCanceledException) { row.Status = "Đã hủy"; Summary = "Đã hủy lượt chạy."; }
@@ -430,7 +449,7 @@ public sealed class MainViewModel : Observable
         try
         {
             marker = CreateSessionMarker();
-            var result = preview ? await SimulateExtensionAsync(progress) : await runExtension(item.Id, progress);
+            var result = preview ? await SimulateExtensionAsync(progress) : await Task.Run(() => runExtension(item.Id, progress));
             item.LogPath = result.LogPath;
             item.Status = result.ExitCode == 0 ? "Hoàn tất" : $"Thất bại · mã {result.ExitCode}";
         }

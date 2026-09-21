@@ -1,5 +1,25 @@
 # Trạng thái bàn giao
 
+## Giao diện mượt hơn khi cài — 2026-09-21, local
+
+Nguyên nhân tìm thấy trong code: `DeploymentService.RunAsync` được gọi từ luồng giao diện nên mọi phần tiếp nối (mỗi khối 80 KB khi tải của cả chục app song song, mỗi khối khi tính SHA-256 bộ cài lớn) đều chạy trên luồng giao diện; log mỗi dòng nối vào một chuỗi lớn dần (Debloat/winget in hàng nghìn dòng) dù không bind lên giao diện; nhiều thanh tiến trình chạy hiệu ứng cùng lúc, máy mới chưa có driver màn hình thì WPF vẽ bằng CPU. Sửa: `RunDeploymentAsync` và add-on EXTEND chạy qua `Task.Run` (Progress tạo trên luồng giao diện nên cập nhật vẫn về đúng), log dùng StringBuilder, hiệu ứng giữ mặc định 60 khung hình/giây theo yêu cầu người dùng (máy khách CPU khỏe; đã thử giới hạn 30 rồi bỏ), báo % tải mỗi 250 ms thay vì 150 ms. Đo trên máy phát triển (CPU mạnh, có GPU): kiểm tra hash file 400 MB tốn thêm khoảng 1,1 giây của luồng giao diện nếu chạy trên đó, nhưng giao diện vẫn phản hồi khoảng 63 lần/giây ở cả hai cách, tức máy này không tái hiện được hiện tượng giật; cần thử trên máy khách yếu. net48 và net10 đều 80 PASS.
+
+## Sửa EVKey treo và thẻ Debloat — 2026-09-21, local
+
+EVKey treo "Đang cài" mãi: `EVKey.exe` là WinRAR SFX (`Path=C:\`, `Setup=.\EVKey\RunAfter.cmd`), script tạo shortcut rồi `start` EVKey64.exe chạy nền; `Start-Process -Wait` của PowerShell chờ cả tiến trình con nên không bao giờ xong (đo thử: cmd mở ping 10 giây thì `-Wait` mất 11,2 giây, cách mới 0,1 giây). Thêm `AppDefinition.WaitInstallerOnly` (catalog + `ReleaseConfig/apps.json` bật cho EVKey): chỉ chờ tiến trình bộ cài (`$p.Handle` rồi `$p.WaitForExit()`), giống CLI. Test chạy thật một bộ cài giả mở tiến trình con dài: trả về dưới 15 giây. Debloat giờ là thẻ ứng dụng trong Sẵn sàng cài đặt (nút tải xuống chạy riêng Debloat, không kèm Windows Setting khác) và thẻ riêng trong Tiến trình cài đặt, không nằm trong Windows Setting; dòng tổng đếm Debloat vào ứng dụng. net48 và net10 đều 80 PASS.
+
+## Information: bố cục tối giản — 2026-09-21, local
+
+Theo yêu cầu "chỉ làm lại bố cục, không thêm dữ liệu": `tool/Info/info.ps1` giữ nguyên (đã thử thêm dữ liệu chi tiết rồi gỡ lại, nội dung trùng bản đã push). Trang dùng cùng dữ liệu cũ, trình bày lại: đầu trang Model/hãng/Serial + Driver; 6 mục ngăn bằng đường kẻ mảnh; thông số 2 cột ở 1120 px, 1 cột ở 940 px; RAM từng khe, GPU, ổ đĩa là tên + một dòng thông số. `InformationRow` được thay bằng `InformationReport`; `InformationService.PreviewJson` dùng chung cho `--preview` và test. Test: net48 và net10 đều 79 PASS.
+
+## Debloat chuyển sang Install Software — 2026-09-21, local
+
+Theo yêu cầu: bỏ Debloat khỏi EXTEND (còn C++ và Share LAN); Windows Setting "Debloatware Windows" (`Win11Debloat`) chạy Win11Debloat 2026.08.24 ghim SHA-256 ở chế độ mặc định `-RunDefaults -Silent` trong mỗi lượt cài chính, song song với cài app; bản giải nén được giữ tại `%LocalAppData%\MiniApps\Win11Debloat` vì chứa backup Registry. Thêm action/mục mặc định thứ 12 và thêm vào `ReleaseConfig/windows.json` (sinh từ catalog mặc định bằng PowerShell, so khớp 12/12). Gỡ Office khi chọn bộ khác: người dùng xác nhận không cần hỏi. Test: net48 và net10 đều 79 PASS. Chưa chạy Debloat qua Install thật.
+
+## Gỡ Microsoft Office khi chọn bộ văn phòng khác — 2026-09-21, local
+
+Chọn WPS, OnlyOffice hoặc Libre Office thì lượt cài chính thêm tác vụ Windows "Gỡ Microsoft Office" (`Scripts/Remove-Office.ps1`, chuyển từ CLI): quét Click-to-Run và Programs and Features, không có Office thì kết thúc ngay; có thì tải Office Tool Plus 11.6.6.0 (R2, dự phòng GitHub, ghim SHA-256), đóng tiến trình Office, chạy `toolbox /rmoffice`, quét lại và báo lỗi nếu Office còn. Cài riêng một app và chọn Null/Microsoft Office không gỡ gì. Office Tool Plus trên R2 (`OTP.zip`) và GitHub là cùng một file, SHA-256 `68A9EBF8B569FA56A55A1B3601EC9260AEB2A3D9ACFED1DEF039C4CC9E092C9F`; giải nén vào `%LocalAppData%\MiniApps\OfficeRemoval\<8 ký tự>` (đường dẫn trong gói sâu 112 ký tự) và xóa sau khi chạy. Test: net48 và net10 đều 78 PASS. `-DryRun` trên máy phát triển (có Office Home and Student 2021): quét thấy Office, tải từ R2, xác minh hash, giải nén, in lệnh; không gỡ gì, thư mục tạm đã dọn. Chưa chạy gỡ thật trên máy nào; cần thử trên máy ảo có Office.
+
 ## Phát hành v0.3.8 — 2026-09-21
 
 Người dùng chạy `Publish.ps1 -Target both -Version 0.3.8` và tạo GitHub Release `v0.3.8` (lệnh publish/release bị chặn với AI). Đã tải lại 5 asset từ Release: đều trả 200; ZIP net48 550219 bytes, SHA-256 `389f04e9d66f257afddf0fd29631e798c50420de004f7122ac8841f213de63d2`; ZIP net10 self-contained 63143867 bytes, SHA-256 `46da4a114ce4835152b19d5c13e6812318bdcc24faad0a04dad7bbba89f5aa46`; khớp manifest và file `.sha256`. Giải nén cả hai: ProductVersion 0.3.8, `--validate-config` và `--preview --startup-smoke-test` thoát 0. Bootstrap chuyển `ReleaseBase` sang v0.3.8; Test-Bootstrap 8/8. net10 giờ được build lại theo từng bản phát hành (không còn giữ gói fallback cũ).

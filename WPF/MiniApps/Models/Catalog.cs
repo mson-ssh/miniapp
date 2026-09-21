@@ -27,6 +27,10 @@ public sealed class AppDefinition : Observable
     public string Sha256 { get => sha256; set => Set(ref sha256, value); }
     private string suite = "";
     public string Suite { get => suite; set => Set(ref suite, value); }
+    // The installer starts the installed app and leaves it running (EVKey's self-extractor does),
+    // so only the installer process itself is awaited, not everything it started.
+    private bool waitInstallerOnly;
+    public bool WaitInstallerOnly { get => waitInstallerOnly; set => Set(ref waitInstallerOnly, value); }
 }
 
 public sealed class AppRow(AppDefinition definition) : Observable
@@ -58,7 +62,7 @@ public static class Catalog
     public const string R2 = "https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev";
     public static List<AppDefinition> Defaults() =>
     [
-        Make("evkey", "EVKey", "EVKey.exe", "-s"),
+        Make("evkey", "EVKey", "EVKey.exe", "-s", waitInstallerOnly: true),
         Make("chrome", "Google Chrome", "chrome.exe", "/silent /install"),
         Make("klite", "K-Lite Codec Pack", "klite.exe", "/verysilent /norestart /suppressmsgboxes"),
         Make("telegram", "Telegram", "tele.exe", "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES"),
@@ -79,8 +83,8 @@ public static class Catalog
         Make("vc64", "Visual C++ x64", "VC_redist.x64.exe", "/install /quiet /norestart"),
         Make("vc86", "Visual C++ x86", "VC_redist.x86.exe", "/install /quiet /norestart")
     ];
-    private static AppDefinition Make(string id, string name, string file, string args, string suite = "") => new()
-    { Id = id, Name = name, Url = $"{R2}/{file}", Arguments = args, Suite = suite };
+    private static AppDefinition Make(string id, string name, string file, string args, string suite = "", bool waitInstallerOnly = false) => new()
+    { Id = id, Name = name, Url = $"{R2}/{file}", Arguments = args, Suite = suite, WaitInstallerOnly = waitInstallerOnly };
     public static void Validate(IEnumerable<AppDefinition> apps)
     {
         var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
