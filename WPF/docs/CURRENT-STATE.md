@@ -1,5 +1,9 @@
 # Trạng thái bàn giao
 
+## Phát hành v0.3.8 — 2026-09-21
+
+Người dùng chạy `Publish.ps1 -Target both -Version 0.3.8` và tạo GitHub Release `v0.3.8` (lệnh publish/release bị chặn với AI). Đã tải lại 5 asset từ Release: đều trả 200; ZIP net48 550219 bytes, SHA-256 `389f04e9d66f257afddf0fd29631e798c50420de004f7122ac8841f213de63d2`; ZIP net10 self-contained 63143867 bytes, SHA-256 `46da4a114ce4835152b19d5c13e6812318bdcc24faad0a04dad7bbba89f5aa46`; khớp manifest và file `.sha256`. Giải nén cả hai: ProductVersion 0.3.8, `--validate-config` và `--preview --startup-smoke-test` thoát 0. Bootstrap chuyển `ReleaseBase` sang v0.3.8; Test-Bootstrap 8/8. net10 giờ được build lại theo từng bản phát hành (không còn giữ gói fallback cũ).
+
 ## net10 đồng bộ với net48 — 2026-09-21, local
 
 Bỏ mọi nhánh `#if NET48` ở giao diện: net10 giờ có trang INFORMATION (nhúng `tool/Info/info.ps1`, cửa sổ vừa khít dữ liệu), nút tải xuống màu đen ở danh sách Sẵn sàng, giống hệt net48. Trang Driver cũ của net10 bị gỡ cùng phần đọc máy riêng (`DeviceInfoService.ReadAsync`); `DeviceInfoService.Resolve` vẫn dùng cho nút Driver trong Information. Test chung một bộ: net48 và net10 đều 76 PASS; `--information-audit` trên net10 đọc đủ 12 dòng. Bản review net10 validate cấu hình và smoke test thoát 0. Khác biệt còn lại chỉ ở csproj: gói/tham chiếu riêng cho net48 (System.Text.Json, ReferenceAssemblies, System.Net.Http).
