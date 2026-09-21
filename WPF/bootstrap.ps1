@@ -81,7 +81,7 @@ function Select-MiniAppsAsset {
 
 function Start-MiniApps {
     param(
-        [string]$ReleaseBase = 'https://github.com/mson-ssh/miniapp/releases/download/v0.3.8',
+        [string]$ReleaseBase = 'https://github.com/mson-ssh/miniapp/releases/download/v0.3.9',
         [string]$PackagePath = '',
         [string]$ExpectedSha256 = '',
         [switch]$Preview

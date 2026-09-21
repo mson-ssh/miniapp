@@ -13,7 +13,7 @@ irm https://raw.githubusercontent.com/mson-ssh/miniapp/main/WPF/bootstrap.ps1 | 
 
 3. Bấm **Yes** khi Windows hỏi quyền Administrator (UAC). MiniApps sẽ tự mở.
 
-Lệnh hiện tải bản **v0.3.8** từ [GitHub Releases](https://github.com/mson-ssh/miniapp/releases/tag/v0.3.8).
+Lệnh hiện tải bản **v0.3.9** từ [GitHub Releases](https://github.com/mson-ssh/miniapp/releases/tag/v0.3.9).
 
 ### Lệnh làm gì
 

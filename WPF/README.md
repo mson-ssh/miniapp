@@ -20,7 +20,7 @@ Máy Windows 10 cũ báo lỗi `Could not create SSL/TLS secure channel` thì b�
 
 Yêu cầu Windows 10 1809 (build 17763) trở lên, x64. Hướng dẫn đầy đủ và cách xử lý lỗi nằm ở [README gốc](../README.md).
 
-Lệnh trên hiện tải Release đã xác minh `v0.3.8`. Bootstrap chỉ được chuyển sang phiên bản mới sau khi đủ hai ZIP, hai checksum và manifest trên GitHub Release đã được tải lại để kiểm tra.
+Lệnh trên hiện tải Release đã xác minh `v0.3.9`. Bootstrap chỉ được chuyển sang phiên bản mới sau khi đủ hai ZIP, hai checksum và manifest trên GitHub Release đã được tải lại để kiểm tra.
 
 ## Giao diện
 

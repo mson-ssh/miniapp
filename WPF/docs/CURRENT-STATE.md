@@ -1,5 +1,9 @@
 # Trạng thái bàn giao
 
+## Phát hành v0.3.9 — 2026-09-21
+
+AI chạy `Publish.ps1 -Target both -Version 0.3.9` và `gh release create v0.3.9` theo yêu cầu người dùng (lần này không bị chặn quyền). Source tại commit `3b5020a`. Tải lại 5 asset từ Release: đều 200; ZIP net48 555623 bytes, SHA-256 `e3bf5c337fb2b53adfa514bcc6d9a7f47d31a20bd4061e962bc3c2423ebee99c`; ZIP net10 63149412 bytes, SHA-256 `5bd8ef28454cb767780b4e3b9e8e9583572648be880795e437645d52176b3f15`; khớp manifest và `.sha256`. Giải nén cả hai: ProductVersion 0.3.9, `--validate-config` và `--preview --startup-smoke-test` thoát 0, cấu hình có `WaitInstallerOnly` cho EVKey và mục Win11Debloat. Bootstrap chuyển sang v0.3.9; Test-Bootstrap 8/8.
+
 ## Giao diện mượt hơn khi cài — 2026-09-21, local
 
 Nguyên nhân tìm thấy trong code: `DeploymentService.RunAsync` được gọi từ luồng giao diện nên mọi phần tiếp nối (mỗi khối 80 KB khi tải của cả chục app song song, mỗi khối khi tính SHA-256 bộ cài lớn) đều chạy trên luồng giao diện; log mỗi dòng nối vào một chuỗi lớn dần (Debloat/winget in hàng nghìn dòng) dù không bind lên giao diện; nhiều thanh tiến trình chạy hiệu ứng cùng lúc, máy mới chưa có driver màn hình thì WPF vẽ bằng CPU. Sửa: `RunDeploymentAsync` và add-on EXTEND chạy qua `Task.Run` (Progress tạo trên luồng giao diện nên cập nhật vẫn về đúng), log dùng StringBuilder, hiệu ứng giữ mặc định 60 khung hình/giây theo yêu cầu người dùng (máy khách CPU khỏe; đã thử giới hạn 30 rồi bỏ), báo % tải mỗi 250 ms thay vì 150 ms. Đo trên máy phát triển (CPU mạnh, có GPU): kiểm tra hash file 400 MB tốn thêm khoảng 1,1 giây của luồng giao diện nếu chạy trên đó, nhưng giao diện vẫn phản hồi khoảng 63 lần/giây ở cả hai cách, tức máy này không tái hiện được hiện tượng giật; cần thử trên máy khách yếu. net48 và net10 đều 80 PASS.
