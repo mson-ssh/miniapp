@@ -28,6 +28,7 @@ public static class WindowsSettingsCatalog
         new("Dns", "DNS Cloudflare / Google"), new("FastStartup", "Tắt Fast Startup"),
         new("Power", "Không tắt màn hình / sleep"), new("PasswordExpiry", "Mật khẩu không hết hạn"),
         new("Winget", "Winget (update)"), new("InfoExe", "Info.exe"),
+        new("ExecutionPolicy", "Execution Policy: Bypass"), new("Smb", "SMB chia sẻ mạng"), new("Disk", "Chia ổ đĩa"),
         new("Custom", "PowerShell tùy chỉnh")
     ];
     public static List<WindowsSettingDefinition> Defaults() =>
@@ -39,7 +40,10 @@ public static class WindowsSettingsCatalog
         Make("Power", "Không tự tắt màn hình / sleep", "Áp dụng khi dùng nguồn điện và pin; tăng tiêu thụ pin."),
         Make("PasswordExpiry", "Mật khẩu không hết hạn", "Thay đổi chính sách hết hạn mật khẩu cục bộ."),
         Make("Winget", "Winget (update)", "Cập nhật WinGet / App Installer và dependency Microsoft; không upgrade toàn bộ ứng dụng."),
-        Make("InfoExe", "Info.exe", "Tải info.exe về Desktop; không tự động mở ứng dụng.")
+        Make("InfoExe", "Info.exe", "Tải info.exe về Desktop; không tự động mở ứng dụng."),
+        Make("Smb", "SMB chia sẻ mạng", "Vào được NAS, máy in, thư mục share (kể cả không mật khẩu và thiết bị cũ, bật SMB1 client); bật dò tìm mạng và chia sẻ file trên mạng Private. Có thể cần khởi động lại."),
+        Make("Disk", "Chia ổ đĩa", "Chia ổ hệ thống theo dung lượng: 256 GB thêm D: 50 GB; 512 GB thêm D: 200 GB; 1 TB thêm D: 400 GB và E: 200 GB. Bỏ qua ổ trên 1100 GB hoặc máy đã có D:/E:. Tắt BitLocker và Hibernate trên C: trước khi chia."),
+        Make("ExecutionPolicy", "Execution Policy: Bypass", "Cho phép chạy mọi script PowerShell trên máy (phạm vi LocalMachine), không chặn hay hỏi xác nhận.")
     ];
     private static WindowsSettingDefinition Make(string action, string name, string description) => new()
     { Id = action, Action = action, Name = name, Description = description, Script = DefaultScript(action) };
@@ -71,6 +75,10 @@ public static class WindowsSettingsCatalog
             """,
         "PasswordExpiry" => "net accounts /maxpwage:unlimited; if ($LASTEXITCODE -ne 0) { throw \"net accounts failed ($LASTEXITCODE)\" }",
         "Winget" => ReadScriptResource("Update-Winget.ps1"),
+        "Smb" => ReadScriptResource("Enable-Smb.ps1"),
+        "Disk" => ReadScriptResource("Split-Disk.ps1"),
+        // -Force: without it Set-ExecutionPolicy asks for confirmation, which fails when nobody can answer.
+        "ExecutionPolicy" => "Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope LocalMachine -Force -ErrorAction Stop",
         "InfoExe" => """
             $ErrorActionPreference = 'Stop'
             $url = 'https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/info.exe'

@@ -9,6 +9,8 @@ public sealed record DeploymentEvent(string Id, string Status, double Progress =
 
 public sealed class DeploymentService
 {
+    // Held for the whole of an install run, by every MiniApps window.
+    public const string DeploymentLockName = "Global\\MiniApps.Deployment";
     private static readonly HttpClient DefaultHttp = CreateDefaultHttpClient();
     private readonly HttpClient http;
     private readonly Func<string, string, IProgress<string>, Task<int>> run;
@@ -57,6 +59,7 @@ public sealed class DeploymentService
         var decisionLogPath = installedOverride == null ? CreateSmartSkipLogPath() : "";
         var appTasks = apps.Select(async app =>
         {
+            string? installer = null;
             try
             {
                 token.ThrowIfCancellationRequested();
@@ -77,7 +80,7 @@ public sealed class DeploymentService
                     return;
                 }
                 events.Report(new(app.Id, "Chờ tải"));
-                var path = await DownloadAsync(app, workDir, events, log, token);
+                var path = installer = await DownloadAsync(app, workDir, events, log, token);
                 events.Report(new(app.Id, "Chờ cài đặt", 100));
                 token.ThrowIfCancellationRequested();
                 var launchDetection = installedOverride != null
@@ -135,6 +138,16 @@ public sealed class DeploymentService
             }
             catch (OperationCanceledException) { events.Report(new(app.Id, "Đã hủy", 0, true)); }
             catch (Exception ex) { log.Report($"{app.Name}: {ex.Message}"); events.Report(new(app.Id, "Thất bại", 0, true, true)); }
+            finally
+            {
+                // Free the disk as soon as this app is done instead of holding every installer until the run ends.
+                // A file still held by the installer stays; the caller removes the whole work folder afterwards.
+                if (installer != null)
+                {
+                    try { File.Delete(installer); }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { log.Report($"{app.Name}: chưa xóa được bộ cài ({ex.Message}); sẽ dọn khi hết lượt."); }
+                }
+            }
         }).ToArray();
         var settingTasks = options.Select(async option =>
         {
@@ -180,11 +193,15 @@ public sealed class DeploymentService
         }
     }
 
+    // Tests point this at a temporary folder so they leave no logs on the machine.
+    internal static string InstallLogDirectory { get; set; } =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MiniApps", "InstallLogs");
+
     private static string CreateSmartSkipLogPath()
     {
         try
         {
-            var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MiniApps", "InstallLogs");
+            var directory = InstallLogDirectory;
             Directory.CreateDirectory(directory);
             return Path.Combine(directory, $"smart-skip-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.log");
         }

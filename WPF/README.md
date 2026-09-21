@@ -14,7 +14,7 @@ Lệnh trên hiện tải Release đã xác minh `v0.3.7`. Bootstrap chỉ đư�
 
 ## Giao diện
 
-- Chỉ có một bản: hai trang **Install Software** và **Driver**.
+- Chỉ có một bản, giống nhau trên net48 và net10: ba trang **Install Software**, **Information** và **Extend**.
 - Manifest `requireAdministrator`.
 - Đọc cấu hình đóng gói trong `ReleaseConfig` cạnh executable. Muốn đổi catalog thì sửa `ReleaseConfig/apps.json` và `windows.json` rồi phát hành lại.
 
@@ -22,13 +22,13 @@ Lệnh trên hiện tải Release đã xác minh `v0.3.7`. Bootstrap chỉ đư�
 
 ### Install Software
 
-Một lần bấm sẽ chọn Office 2024 hoặc WPS rồi xử lý toàn bộ catalog cùng các Windows Setting đã cấu hình. EXE có thể chạy song song; MSI được xếp hàng tuần tự theo giới hạn của Windows Installer.
+Chọn bộ văn phòng ở drop list cạnh nút Cài đặt (Microsoft Office, WPS, OnlyOffice, Libre Office hoặc Null — mặc định, không cài bộ nào), rồi một lần bấm xử lý toàn bộ catalog cùng các Windows Setting đã cấu hình. Trước khi chạy, danh sách app hiện kèm nút tải xuống để cài riêng từng app. EXE có thể chạy song song; MSI được xếp hàng tuần tự theo giới hạn của Windows Installer.
 
 Smart Skip (cả net48 và net10) đọc inventory phần mềm theo ba trạng thái `Installed`, `NotInstalled`, `Unknown`, kiểm tra lại trước khi mở installer và ghi bằng chứng vào `%LocalAppData%\MiniApps\InstallLogs`. Trạng thái không xác minh được sẽ không tự cài đè.
 
-### Driver
+### Information
 
-Hiển thị host, hãng, model và serial; cho phép sao chép serial và mở trang hỗ trợ chính thức của nhà sản xuất. MiniApps chưa tự tải hoặc cài driver.
+Đọc thông tin máy bằng `tool/Info/info.ps1` nhúng trong ứng dụng: Windows/bản quyền, tên máy, model, serial, CPU, RAM, GPU, ổ đĩa, màn hình. Nút Driver cạnh Serial sao chép serial rồi mở trang hỗ trợ chính thức của hãng. MiniApps chưa tự tải hoặc cài driver.
 
 ## Build và kiểm thử
 

@@ -82,6 +82,22 @@
       "Suite": "WPS"
     },
     {
+      "Id": "onlyoffice",
+      "Name": "OnlyOffice",
+      "Url": "https://download.onlyoffice.com/install/desktop/editors/windows/distrib/onlyoffice/DesktopEditors_x64.exe",
+      "Arguments": "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES",
+      "Sha256": "",
+      "Suite": "OnlyOffice"
+    },
+    {
+      "Id": "libreoffice",
+      "Name": "LibreOffice",
+      "Url": "https://downloadarchive.documentfoundation.org/libreoffice/old/26.2.6.3/win/x86_64/LibreOffice_26.2.6.3_Win_x86-64.msi",
+      "Arguments": "/qn /norestart",
+      "Sha256": "f9877032fd908beb9c0ddf06df4af5c2e85f419c42e14876c4cce5aae5fb2660",
+      "Suite": "LibreOffice"
+    },
+    {
       "Id": "vc64",
       "Name": "Visual C\u002B\u002B x64",
       "Url": "https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/VC_redist.x64.exe",

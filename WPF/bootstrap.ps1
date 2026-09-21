@@ -18,6 +18,32 @@ function Select-MiniAppsTarget {
     return 'net10'
 }
 
+function Get-MiniAppsTargetOrder {
+    # net48 can still fail on a machine whose Framework reports 4.8 but is damaged;
+    # the self-contained net10 package needs nothing from the machine, so it is the fallback.
+    param([Parameter(Mandatory = $true)][ValidateSet('net48','net10')][string]$Target)
+    if ($Target -eq 'net48') { return @('net48', 'net10') }
+    return @('net10')
+}
+
+function Test-MiniAppsPackage {
+    # Headless probe: loads the runtime, WPF and the packaged ReleaseConfig without opening a window.
+    param(
+        [Parameter(Mandatory = $true)][string]$Exe,
+        [int]$TimeoutSeconds = 60
+    )
+    $config = Join-Path (Split-Path -Parent $Exe) 'ReleaseConfig'
+    try {
+        $probe = Start-Process -FilePath $Exe -ArgumentList @('--validate-config', '--config-root', ('"' + $config + '"')) -WindowStyle Hidden -PassThru
+    } catch { return $false }
+    $null = $probe.Handle # Keep the handle so ExitCode is available after exit.
+    if (-not $probe.WaitForExit($TimeoutSeconds * 1000)) {
+        try { $probe.Kill() } catch { }
+        return $false
+    }
+    return $probe.ExitCode -eq 0
+}
+
 function ConvertFrom-MiniAppsManifestContent {
     param([Parameter(Mandatory = $true)]$Content)
     $json = if ($Content -is [byte[]]) {
@@ -68,12 +94,14 @@ function Start-MiniApps {
         $body = ${function:Start-MiniApps}.ToString()
         $buildTestBody = ${function:Test-MiniAppsWindowsBuild}.ToString()
         $targetBody = ${function:Select-MiniAppsTarget}.ToString()
+        $orderBody = ${function:Get-MiniAppsTargetOrder}.ToString()
+        $probeBody = ${function:Test-MiniAppsPackage}.ToString()
         $manifestBody = ${function:ConvertFrom-MiniAppsManifestContent}.ToString()
         $assetBody = ${function:Select-MiniAppsAsset}.ToString()
         $escapedBase = $ReleaseBase.Replace("'", "''")
         $escapedPath = $PackagePath.Replace("'", "''")
         $escapedHash = $ExpectedSha256.Replace("'", "''")
-        $command = "function Test-MiniAppsWindowsBuild { $buildTestBody }; function Select-MiniAppsTarget { $targetBody }; function ConvertFrom-MiniAppsManifestContent { $manifestBody }; function Select-MiniAppsAsset { $assetBody }; function Start-MiniApps { $body }; Start-MiniApps -ReleaseBase '$escapedBase' -PackagePath '$escapedPath' -ExpectedSha256 '$escapedHash'"
+        $command = "function Test-MiniAppsWindowsBuild { $buildTestBody }; function Select-MiniAppsTarget { $targetBody }; function Get-MiniAppsTargetOrder { $orderBody }; function Test-MiniAppsPackage { $probeBody }; function ConvertFrom-MiniAppsManifestContent { $manifestBody }; function Select-MiniAppsAsset { $assetBody }; function Start-MiniApps { $body }; Start-MiniApps -ReleaseBase '$escapedBase' -PackagePath '$escapedPath' -ExpectedSha256 '$escapedHash'"
         $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
         Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded"
         return
@@ -145,27 +173,40 @@ function Start-MiniApps {
     $lease = [IO.File]::Open((Join-Path $session 'session.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
     $oldTemp = $env:TEMP; $oldTmp = $env:TMP; $oldSession = $env:MINIAPPS_SESSION
     try {
-        $zip = Join-Path $session 'package.zip'
+        # Verify, then extract. A size or hash mismatch stops the run: it means a bad package, not an unsupported machine.
+        function Expand-Package([string]$Zip, [string]$Sha256, [string]$Name) {
+            if ((Get-FileHash -LiteralPath $Zip -Algorithm SHA256).Hash -ne $Sha256) { throw 'Package SHA-256 mismatch. Nothing was executed.' }
+            $dir = Join-Path $session $Name
+            Expand-Archive -LiteralPath $Zip -DestinationPath $dir
+            $packageExe = Join-Path $dir 'MiniApps.exe'
+            if (-not (Test-Path -LiteralPath $packageExe)) { throw 'Package does not contain MiniApps.exe.' }
+            return $packageExe
+        }
         if ($PackagePath) {
             if ($ExpectedSha256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'A local package requires its expected SHA-256.' }
+            $zip = Join-Path $session 'package.zip'
             Copy-Item -LiteralPath $PackagePath -Destination $zip
+            $exe = Expand-Package $zip $ExpectedSha256 'app'
         } else {
             if ($ReleaseBase -notmatch '^https://github\.com/mson-ssh/miniapp/releases/(latest/download|download/v[a-zA-Z0-9._-]+)$') { throw 'Release URL is not an approved MiniApps GitHub release URL.' }
             # GitHub release assets use application/octet-stream. Windows PowerShell 5.1
             # therefore returns raw bytes/string instead of deserializing JSON.
             $manifestResponse = Invoke-WebRequest -Uri "$ReleaseBase/manifest-$rid.json" -UseBasicParsing -TimeoutSec 90
             $manifest = ConvertFrom-MiniAppsManifestContent -Content $manifestResponse.Content
-            $asset = Select-MiniAppsAsset -Manifest $manifest -Target $target -Architecture $rid
-            $ExpectedSha256 = [string]$asset.sha256
-            Write-Host "Downloading MiniApps $target..." -ForegroundColor Cyan
-            Invoke-WebRequest -Uri ([string]$asset.url) -OutFile $zip -UseBasicParsing -TimeoutSec 600
-            if ((Get-Item -LiteralPath $zip).Length -ne [long]$asset.size) { throw 'Package size does not match the release manifest.' }
+            $exe = $null
+            foreach ($candidate in (Get-MiniAppsTargetOrder -Target $target)) {
+                $asset = Select-MiniAppsAsset -Manifest $manifest -Target $candidate -Architecture $rid
+                $zip = Join-Path $session "package-$candidate.zip"
+                Write-Host "Downloading MiniApps $candidate..." -ForegroundColor Cyan
+                Invoke-WebRequest -Uri ([string]$asset.url) -OutFile $zip -UseBasicParsing -TimeoutSec 600
+                if ((Get-Item -LiteralPath $zip).Length -ne [long]$asset.size) { throw 'Package size does not match the release manifest.' }
+                $candidateExe = Expand-Package $zip ([string]$asset.sha256) "app-$candidate"
+                if (Test-MiniAppsPackage -Exe $candidateExe) { $exe = $candidateExe; break }
+                Write-Warning "MiniApps $candidate could not start on this machine."
+            }
+            if (-not $exe) { throw 'MiniApps could not start on this machine. Nothing was installed.' }
         }
-        if ((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash -ne $ExpectedSha256) { throw 'Package SHA-256 mismatch. Nothing was executed.' }
-        $appDir = Join-Path $session 'app'
-        Expand-Archive -LiteralPath $zip -DestinationPath $appDir
-        $exe = Join-Path $appDir 'MiniApps.exe'
-        if (-not (Test-Path -LiteralPath $exe)) { throw 'Package does not contain MiniApps.exe.' }
+        $appDir = Split-Path -Parent $exe
         $env:TEMP = Join-Path $session 'temp'; $env:TMP = $env:TEMP; $env:MINIAPPS_SESSION = $session
         New-Item -Path $env:TEMP -ItemType Directory | Out-Null
         $start = @{ FilePath = $exe; WorkingDirectory = $appDir; Wait = $true; PassThru = $true }

@@ -23,6 +23,8 @@ public partial class App : Application
             }
 
             var preview = e.Args.Contains("--preview");
+            // Housekeeping only: whatever goes wrong here must not stop MiniApps from opening.
+            if (!preview) { try { WorkFolderCleaner.RemoveStale(WorkFolderCleaner.DefaultRoot); } catch (Exception) { } }
             configRoot = Path.Combine(AppContext.BaseDirectory, "ReleaseConfig");
             var model = new MainViewModel(preview, settingsDirectory: configRoot, requireSettings: true);
             var window = new MainWindow(model);

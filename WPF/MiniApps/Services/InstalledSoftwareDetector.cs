@@ -118,6 +118,8 @@ internal static class InstalledSoftwareDetector
             "zoom" => Match(name, @"^(?:Zoom|Zoom Workplace)(?:\s+\d[\d.]*)?(?:\s+\((?:32|64)-bit\))?$"),
             "office" => IsOfficeSuiteDisplayName(name),
             "wps" => Match(name, @"^WPS Office(?:\s+\d[\d.]*)?(?:\s+\([^)]*\))?$"),
+            "onlyoffice" => Match(name, @"^ONLYOFFICE(?: Desktop Editors)?(?:\s+\d[\d.]*)?(?:\s+\((?:x64|x86|64-bit|32-bit)\))?$"),
+            "libreoffice" => Match(name, @"^LibreOffice(?:\s+\d[\d.]*)?$"),
             "vc64" => IsVisualCRedistributable(name, "x64"),
             "vc86" => IsVisualCRedistributable(name, "x86"),
             _ => Match(name, "^" + Regex.Escape(app.Name.Trim()) + @"(?:$|\s+(?:v(?:ersion)?\s*)?\d[\w.\-]*|\s*\([^)]*\)$)")

@@ -12,7 +12,7 @@ dotnet build ./MiniApps.Tests/MiniApps.Tests.csproj -c Release -f net48
 & ./MiniApps.Tests/bin/Release/net48/MiniApps.Tests.exe
 ```
 
-Test hiện dùng fake runner/download và WPF mô phỏng, không chạy installer hoặc Windows settings thật. Khi sửa bootstrap, chạy riêng:
+Test hiện dùng fake runner/download và WPF mô phỏng, không chạy installer hoặc Windows settings thật. Khi sửa `MiniApps/Scripts/Split-Disk.ps1`, chạy `./Test-SplitDisk.ps1` (dùng lệnh ổ đĩa giả, không đụng ổ thật). Khi sửa bootstrap, chạy riêng:
 
 ```powershell
 & ./Test-Bootstrap.ps1

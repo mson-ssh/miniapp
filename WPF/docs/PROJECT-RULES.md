@@ -13,17 +13,17 @@ MiniApps phải yêu cầu quyền Administrator ngay khi khởi động. Ngư�
 ## Giao diện và hành vi
 
 - WPF, minimalist, sáng dịu, ít nút. Không dùng font icon/emoji làm icon; SVG được phép khi cần. Không lấy Ninite làm mẫu hiện tại.
-- Giao diện chỉ có Install Software và Driver. Không có trang Setting; catalog được sửa trực tiếp trong `ReleaseConfig/*.json`.
-- Install Software có một nút, không chọn từng ứng dụng/thiết lập. Hộp thoại: “Bạn muốn sử dụng ứng dụng nào:” với Office 2024 / WPS / Cancel. Cancel không khởi chạy tác vụ.
+- Thanh điều hướng viết hoa. Giao diện net48 và net10 giống nhau: INSTALL SOFTWARE, INFORMATION và EXTEND. Information đọc dữ liệu từ `tool/Info/info.ps1`, có Làm mới; nút Driver cạnh Serial sao chép Serial rồi mở hỗ trợ chính thức của hãng. Nút Sao chép toàn bộ vẫn ẩn. Không có trang Setting; catalog được sửa trực tiếp trong `ReleaseConfig/*.json`.
+- Install Software có một nút Cài đặt cho toàn bộ danh sách. Cạnh nút Cài đặt có drop list chọn bộ văn phòng: Microsoft Office / WPS / OnlyOffice / Libre Office / Null (mặc định, không cài bộ nào); không còn hộp thoại chọn Office. Drop list khóa khi đang chạy hoặc sau khi lượt cài đã bắt đầu. Panel Sẵn sàng liệt kê mọi app trong catalog (gồm cả bốn bộ văn phòng), mỗi app có nút tải xuống để cài riêng app đó: không chạy Windows Setting, vẫn qua Smart Skip, và không khóa nút Cài đặt chính.
 - Tiến trình ứng dụng chia ba cột. Windows Setting là một bản ghi có thể mở rộng để xem từng tác vụ. Không có phần chọn Windows Setting trước khi chạy.
 - Cài nhiều ứng dụng nhất có thể đồng thời; Windows Setting bắt đầu cùng lượt. MSI cần tuần tự do Windows Installer; không áp giới hạn bốn app.
 - Lượt cài hoàn tất thì nút xám, bị khóa trong phiên. Lượt hủy hoặc lỗi cấp phiên cho thử lại; lỗi từng app được báo trong kết quả.
 - Nhận diện ứng dụng đã cài là tính năng tự động.
-- Driver đọc Host, hãng, model, serial có thể copy và mở URL hãng. Chưa tự tải/cài driver.
-- Debloat/Optimize không còn trong ứng dụng.
+- Nút Driver trong Information sao chép Serial và mở URL hãng. Chưa tự tải/cài driver.
+- Trang EXTEND chứa các phần mở rộng chạy riêng khi cần, luôn hỏi xác nhận trước và dùng chung khóa cài đặt (không chạy cùng lúc với Install Software). Debloatware Windows chạy Win11Debloat ghim phiên bản, đã kiểm SHA-256, ở chế độ mặc định `-RunDefaults -Silent`; bản giải nén được giữ lại vì chứa backup Registry. Môi trường C++ cài VS Code, MSYS2, MinGW-w64 UCRT64, PATH máy và extension C/C++, bỏ qua phần đã có.
 
 ## Ranh giới thực thi
 
 Đích triển khai của dự án là Windows 10 1809/build 17763 trở lên và Windows 11 x64. Đây là baseline dự án, không khẳng định mọi edition/runtime đều còn được nhà cung cấp hỗ trợ. Từng Windows setting có kiểm tra tương thích riêng.
 
-Không tự thêm thao tác chia ổ, tắt bảo mật hoặc tối ưu khác từ CLI. Không kill installer đang chạy để làm tiến trình trông hoàn tất. Chỉ dọn thư mục phiên do MiniApps sở hữu; bảo toàn backup và dữ liệu người dùng.
+Chia ổ đĩa là Windows Setting theo đúng quy tắc của `$DiskScript` trong CLI (nhóm 256 GB / 512 GB / 1 TB, bỏ qua ổ trên 1100 GB hoặc máy đã có D:/E:, dừng nếu C: còn từ 30 GB trở xuống, tắt BitLocker và Hibernate trước khi thu nhỏ C:); thay đổi các mốc này phải sửa cả `Test-SplitDisk.ps1`. Không tự thêm thao tác tắt bảo mật hoặc tối ưu khác từ CLI. Không kill installer đang chạy để làm tiến trình trông hoàn tất. Chỉ dọn thư mục phiên do MiniApps sở hữu; bảo toàn backup và dữ liệu người dùng.

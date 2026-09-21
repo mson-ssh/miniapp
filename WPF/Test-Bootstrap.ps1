@@ -19,6 +19,9 @@ foreach ($case in $targetCases) {
     if ($actual -ne $case.Expected) { throw "Framework release $($case.Release) selected $actual instead of $($case.Expected)." }
 }
 Write-Host 'PASS bootstrap target selection: missing/lower => net10; 4.8/higher => net48.'
+if ((Get-MiniAppsTargetOrder -Target net48) -join ',' -ne 'net48,net10') { throw 'net48 must fall back to net10.' }
+if ((Get-MiniAppsTargetOrder -Target net10) -join ',' -ne 'net10') { throw 'net10 has no fallback.' }
+Write-Host 'PASS bootstrap fallback order: net48 then net10; net10 alone.'
 
 $manifestJson = '{"schemaVersion":2,"version":"0.2.0","architecture":"win-x64","assets":[]}'
 $fromBytes = ConvertFrom-MiniAppsManifestContent -Content ([Text.Encoding]::UTF8.GetBytes($manifestJson))
@@ -68,6 +71,20 @@ try {
     $sessions = @(Get-ChildItem -LiteralPath (Join-Path $env:TEMP 'MiniApps') -Directory)
     if ($sessions.Count -ne 0) { throw 'Bootstrap did not clean its session.' }
     Write-Host 'PASS bootstrap: verify, extract, launch fixture, wait, clean session.'
+    $probeDir = Join-Path $fixture 'probe'
+    New-Item -ItemType Directory -Path $probeDir | Out-Null
+    foreach ($case in @(@{ Name = 'ok'; Body = 'return 0;' }, @{ Name = 'fail'; Body = 'return 3;' }, @{ Name = 'hang'; Body = 'System.Threading.Thread.Sleep(30000); return 0;' })) {
+        Add-Type -TypeDefinition "public class BootstrapProbe_$($case.Name) { public static int Main(string[] args) { $($case.Body) } }" -OutputAssembly (Join-Path $probeDir "$($case.Name).exe") -OutputType ConsoleApplication
+    }
+    Set-Content -LiteralPath (Join-Path $probeDir 'broken.exe') -Value 'not an executable'
+    if (-not (Test-MiniAppsPackage -Exe (Join-Path $probeDir 'ok.exe'))) { throw 'Probe must accept a package that exits 0.' }
+    if (Test-MiniAppsPackage -Exe (Join-Path $probeDir 'fail.exe')) { throw 'Probe must reject a package that exits non-zero.' }
+    if (Test-MiniAppsPackage -Exe (Join-Path $probeDir 'broken.exe')) { throw 'Probe must reject a file that cannot start.' }
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    if (Test-MiniAppsPackage -Exe (Join-Path $probeDir 'hang.exe') -TimeoutSeconds 2) { throw 'Probe must reject a package that hangs.' }
+    if ($clock.Elapsed.TotalSeconds -gt 10) { throw 'Probe did not stop at its timeout.' }
+    if (Get-Process -Name hang -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$probeDir*" }) { throw 'Probe left the hung package running.' }
+    Write-Host 'PASS bootstrap probe: accepts exit 0; rejects non-zero, unstartable and hung packages.'
     $files = @(Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.ps1') + @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'MiniApps/Scripts') -Filter '*.ps1')
     foreach ($file in $files) {
         $tokens = $null; $errors = $null

@@ -68,6 +68,14 @@ public static class Catalog
         Make("zoom", "Zoom", "zoom.exe", "/silent"),
         Make("office", "Office 2024", "OfficeSetup.exe", "", "Office"),
         Make("wps", "WPS Office", "wps.exe", "/S", "WPS"),
+        // Both installers exceed R2's 300 MB file limit, so they come from the vendors.
+        // OnlyOffice's URL always serves the latest release, so it cannot carry a hash.
+        new() { Id = "onlyoffice", Name = "OnlyOffice", Suite = "OnlyOffice", Arguments = "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES",
+            Url = "https://download.onlyoffice.com/install/desktop/editors/windows/distrib/onlyoffice/DesktopEditors_x64.exe" },
+        // The Document Foundation archive keeps every build permanently; 26.2.6.3 is the 26.2.6 release.
+        new() { Id = "libreoffice", Name = "LibreOffice", Suite = "LibreOffice", Arguments = "/qn /norestart",
+            Url = "https://downloadarchive.documentfoundation.org/libreoffice/old/26.2.6.3/win/x86_64/LibreOffice_26.2.6.3_Win_x86-64.msi",
+            Sha256 = "f9877032fd908beb9c0ddf06df4af5c2e85f419c42e14876c4cce5aae5fb2660" },
         Make("vc64", "Visual C++ x64", "VC_redist.x64.exe", "/install /quiet /norestart"),
         Make("vc86", "Visual C++ x86", "VC_redist.x86.exe", "/install /quiet /norestart")
     ];
@@ -83,7 +91,7 @@ public static class Catalog
             if (!Uri.TryCreate(app.Url, UriKind.Absolute, out var uri) || uri.Scheme != "https" || uri.UserInfo.Length > 0) throw new InvalidDataException($"{app.Name}: URL phải là HTTPS.");
             if (!new[] { ".exe", ".msi" }.Contains(Path.GetExtension(uri.AbsolutePath).ToLowerInvariant())) throw new InvalidDataException($"{app.Name}: URL phải trỏ đến file .exe hoặc .msi.");
             if (app.Sha256.Length > 0 && !Regex.IsMatch(app.Sha256, "^[a-fA-F0-9]{64}$")) throw new InvalidDataException($"{app.Name}: SHA-256 phải có 64 ký tự hex.");
-            if (app.Suite is not ("" or "Office" or "WPS")) throw new InvalidDataException("Nhóm Office không hợp lệ.");
+            if (app.Suite is not ("" or "Office" or "WPS" or "OnlyOffice" or "LibreOffice")) throw new InvalidDataException("Nhóm Office không hợp lệ.");
         }
     }
 }
