@@ -1,5 +1,9 @@
 # Trạng thái bàn giao
 
+## Information 2 cột — 2026-09-21, local
+
+Người dùng thấy trang dài mà thừa chiều ngang: các mục chuyển sang 2 cột cân nhau (trái: Hệ điều hành, Vi xử lý, Bộ nhớ; phải: Đồ họa, Lưu trữ, Màn hình), tên mục đặt trên nội dung, cột nhãn co theo nhãn dài nhất của từng mục. Trang ngắn khoảng một nửa, cửa sổ tự co theo. Dữ liệu không đổi. Sau đó: loại card đồ họa hiển thị iGPU (tích hợp) / GPU (rời), đổi ở `InformationService` vì `info.ps1` là nguồn của info.exe nên giữ nguyên; chữ to thêm một bậc (giá trị 15, nhãn và dòng phụ 14, tên mục 15, tên máy 24). Test mới kiểm tra hai cột cạnh nhau, rộng bằng nhau, chiều cao chênh không quá 1,6 lần. net48 và net10 đều 80 PASS. Chưa push/phát hành.
+
 ## Phát hành v0.3.9 — 2026-09-21
 
 AI chạy `Publish.ps1 -Target both -Version 0.3.9` và `gh release create v0.3.9` theo yêu cầu người dùng (lần này không bị chặn quyền). Source tại commit `3b5020a`. Tải lại 5 asset từ Release: đều 200; ZIP net48 555623 bytes, SHA-256 `e3bf5c337fb2b53adfa514bcc6d9a7f47d31a20bd4061e962bc3c2423ebee99c`; ZIP net10 63149412 bytes, SHA-256 `5bd8ef28454cb767780b4e3b9e8e9583572648be880795e437645d52176b3f15`; khớp manifest và `.sha256`. Giải nén cả hai: ProductVersion 0.3.9, `--validate-config` và `--preview --startup-smoke-test` thoát 0, cấu hình có `WaitInstallerOnly` cho EVKey và mục Win11Debloat. Bootstrap chuyển sang v0.3.9; Test-Bootstrap 8/8.

@@ -21,6 +21,10 @@ internal sealed class InformationReport
     public string ReadAt { get; init; } = "—";
     public IReadOnlyList<InformationSection> Sections { get; init; } = Array.Empty<InformationSection>();
     public InformationSection? Section(string title) => Sections.FirstOrDefault(section => section.Title == title);
+    // Shown side by side: the machine itself on the left; graphics, storage and display on the right.
+    private static readonly string[] LeftTitles = { "Hệ điều hành", "Vi xử lý", "Bộ nhớ" };
+    public IEnumerable<InformationSection> LeftSections => Sections.Where(section => LeftTitles.Contains(section.Title));
+    public IEnumerable<InformationSection> RightSections => Sections.Where(section => !LeftTitles.Contains(section.Title));
     public string ToText()
     {
         var text = new StringBuilder().AppendLine($"{Model} · {Maker}").AppendLine($"Serial: {Serial}");
@@ -109,7 +113,7 @@ internal static class InformationService
                 ("Dung lượng", Text("RamTotal"), true),
                 ("Loại", Join(" · ", Distinct(ram.Select(module => module.Type)), Distinct(ram.Select(module => module.Speed)), Distinct(ram.Select(module => module.FormFactor))), false)),
                 ram.Select((module, index) => new InformationItem($"Khe {index + 1} · {module.Capacity}", Detail(module.Manufacturer, module.Type, module.Speed))).ToArray()),
-            new("Đồ họa", [], gpus.Count > 0 ? gpus.Select(gpu => new InformationItem(gpu.Name, Detail(gpu.Kind, gpu.Memory, gpu.Power))).ToArray() : [new InformationItem("—", "")]),
+            new("Đồ họa", [], gpus.Count > 0 ? gpus.Select(gpu => new InformationItem(gpu.Name, Detail(GpuKind(gpu.Kind), gpu.Memory, gpu.Power))).ToArray() : [new InformationItem("—", "")]),
             new("Lưu trữ", [], disks.Count > 0
                 ? disks.Select(disk => new InformationItem(disk.Model, Detail(disk.Capacity, disk.Connection)) { Partitions = disk.Partitions }).ToArray()
                 : [new InformationItem("—", "")]),
@@ -130,5 +134,7 @@ internal static class InformationService
     private static string Join(string separator, params string[] parts) =>
         string.Join(separator, parts.Where(part => part.Length > 0 && part != "—")) is { Length: > 0 } joined ? joined : "—";
     private static string Detail(params string[] parts) => Join(" · ", parts) is var detail && detail != "—" ? detail : "";
+    // info.ps1 (also the source of info.exe) says "Tích hợp" / "Rời"; the page uses the short names technicians use.
+    private static string GpuKind(string kind) => kind switch { "Tích hợp" => "iGPU", "Rời" => "GPU", _ => kind };
     private static string Distinct(IEnumerable<string> values) => Join(" / ", values.Distinct().ToArray());
 }

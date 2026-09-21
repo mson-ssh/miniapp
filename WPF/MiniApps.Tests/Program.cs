@@ -876,9 +876,10 @@ var renderThread = new Thread(() =>
         if (publicVm.Page != 1 || ((System.Windows.Controls.ListBoxItem)navigation.Items[1]).Content?.ToString() != "INFORMATION")
             throw new Exception("Information must replace Driver.");
         var information = ((System.Windows.Controls.Grid)publicWindow.FindName("PageHost")).Children.OfType<MiniApps.InformationView>().Single();
-        var sectionList = (System.Windows.Controls.ItemsControl)information.FindName("SectionList");
-        if (!information.IsVisible || sectionList.Items.Count != 6)
-            throw new Exception($"Information did not display its preview data: visible={information.IsVisible}, sections={sectionList.Items.Count}, status={((System.Windows.Controls.TextBlock)information.FindName("StatusText")).Text}.");
+        var leftSections = (System.Windows.Controls.ItemsControl)information.FindName("LeftSections");
+        var rightSections = (System.Windows.Controls.ItemsControl)information.FindName("RightSections");
+        if (!information.IsVisible || leftSections.Items.Count != 3 || rightSections.Items.Count != 3)
+            throw new Exception($"Information did not display its preview data in two columns: visible={information.IsVisible}, left={leftSections.Items.Count}, right={rightSections.Items.Count}, status={((System.Windows.Controls.TextBlock)information.FindName("StatusText")).Text}.");
         Console.WriteLine("PASS Information navigation and embedded data view");
         var heldRead = new TaskCompletionSource<InformationReport>();
         var slowInformation = new MiniApps.InformationView(_ => heldRead.Task);
@@ -922,7 +923,8 @@ var renderThread = new Thread(() =>
         var fixtureDisks = layout.Section("Lưu trữ")!.Items;
         if (fixtureDisks.Count != 2 || fixtureDisks[0].Partitions.Count != 2 || Math.Abs(fixtureDisks[0].Partitions[0].UsedPercent - 230d / 650 * 100) > 0.01)
             throw new Exception("Disk partitions or capacity calculations are incorrect.");
-        if (fixtureDisks[0].Detail != "1 TB · NVMe" || layout.Section("Vi xử lý")!.Items[0].Detail != "")
+        if (fixtureDisks[0].Detail != "1 TB · NVMe" || layout.Section("Vi xử lý")!.Items[0].Detail != "" ||
+            !layout.Section("Đồ họa")!.Items.Select(item => item.Detail).SequenceEqual(new[] { "iGPU · 128 MB", "GPU · 8 GB · 115 W" }))
             throw new Exception("Component details are wrong: " + fixtureDisks[0].Detail);
         if (new StorageVolume("X", 20, 10).HasCapacity || new StorageVolume("X", null, 10).HasCapacity || new StorageVolume("X", 0, 0).HasCapacity)
             throw new Exception("Invalid capacity must not display a usage bar.");
@@ -964,12 +966,15 @@ var renderThread = new Thread(() =>
                 foreach (var deeper in DescendantsOf<T>(child)) yield return deeper;
             }
         }
-        // Short properties sit two to a line at the default width; a machine that reports less shows fewer lines, not dashes.
+        // Sections sit in two columns of about the same height, so the page is not long and narrow.
         publicWindow.Width = 1120; publicWindow.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle); publicWindow.UpdateLayout();
-        var firstFacts = DescendantsOf<System.Windows.Controls.WrapPanel>(information).First(panel => panel.Children.Count == 3);
-        var factTops = firstFacts.Children.Cast<System.Windows.FrameworkElement>().Select(fact => Math.Round(fact.TranslatePoint(new System.Windows.Point(), firstFacts).Y)).ToList();
-        if (factTops[0] != factTops[1] || factTops[2] <= factTops[0])
-            throw new Exception($"Information facts must sit two per line at the default width: panel={firstFacts.ActualWidth}, tops={string.Join(",", factTops)}.");
+        var leftColumn = (System.Windows.FrameworkElement)information.FindName("LeftSections");
+        var rightColumn = (System.Windows.FrameworkElement)information.FindName("RightSections");
+        var leftX = leftColumn.TranslatePoint(new System.Windows.Point(), information).X;
+        var rightX = rightColumn.TranslatePoint(new System.Windows.Point(), information).X;
+        if (rightX - leftX < leftColumn.ActualWidth || Math.Abs(leftColumn.ActualWidth - rightColumn.ActualWidth) > 1 ||
+            Math.Max(leftColumn.ActualHeight, rightColumn.ActualHeight) > 1.6 * Math.Min(leftColumn.ActualHeight, rightColumn.ActualHeight))
+            throw new Exception($"Information sections must sit in two balanced columns: left={leftColumn.ActualWidth}x{leftColumn.ActualHeight}, right={rightColumn.ActualWidth}x{rightColumn.ActualHeight}.");
         var sparse = InformationService.Parse("""{"OS":"Windows 10 Pro","CPU":"Intel Core i5","Serial":"S1","Manufacturer":"Dell Inc."}""");
         if (sparse.Section("Bộ nhớ")!.Facts.Any(fact => fact.Label == "Loại") || sparse.Section("Bộ nhớ")!.Facts.Single().Value != "—" ||
             sparse.Section("Lưu trữ")!.Items.Single().Title != "—" || sparse.Maker != "Dell Inc." ||
@@ -977,7 +982,7 @@ var renderThread = new Thread(() =>
             throw new Exception("Unknown optional values must be left out and an unconfirmed licence flagged.");
         if (layout.Section("Hệ điều hành")!.Facts[1].Tone != "good" || !layout.ToText().Contains("Khe 2 · 16 GB · Samsung · DDR5 · 5600 MT/s"))
             throw new Exception("Status tone or the copied report is wrong.");
-        Console.WriteLine("PASS Information facts sit two per line and unknown values are left out");
+        Console.WriteLine("PASS Information sections sit in two balanced columns and unknown values are left out");
         // The window fits the Information data, and gives the previous height back on other pages.
         var informationScroll = (System.Windows.Controls.ScrollViewer)information.FindName("InformationScroll");
         publicWindow.FitInformationHeight();
