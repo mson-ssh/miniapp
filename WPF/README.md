@@ -4,11 +4,21 @@ MiniApps là ứng dụng WPF dành cho Windows 10/11 x64. Ứng dụng yêu c�
 
 ## Cài nhanh bằng PowerShell
 
+Mở PowerShell (không cần quyền Administrator), dán lệnh rồi bấm **Yes** ở hộp thoại UAC:
+
 ```powershell
 irm https://raw.githubusercontent.com/mson-ssh/miniapp/main/WPF/bootstrap.ps1 | iex
 ```
 
 `irm` là bí danh của `Invoke-RestMethod`. Bootstrap tự yêu cầu UAC, chọn gói net48 khi máy có .NET Framework 4.8 hoặc dùng gói net10 self-contained dự phòng (kể cả khi net48 chạy thử không được), xác minh manifest/kích thước/SHA-256 rồi mới chạy.
+
+Máy Windows 10 cũ báo lỗi `Could not create SSL/TLS secure channel` thì bật TLS 1.2 trước:
+
+```powershell
+[Net.ServicePointManager]::SecurityProtocol = 'Tls12'; irm https://raw.githubusercontent.com/mson-ssh/miniapp/main/WPF/bootstrap.ps1 | iex
+```
+
+Yêu cầu Windows 10 1809 (build 17763) trở lên, x64. Hướng dẫn đầy đủ và cách xử lý lỗi nằm ở [README gốc](../README.md).
 
 Lệnh trên hiện tải Release đã xác minh `v0.3.8`. Bootstrap chỉ được chuyển sang phiên bản mới sau khi đủ hai ZIP, hai checksum và manifest trên GitHub Release đã được tải lại để kiểm tra.
 
@@ -49,7 +59,7 @@ dotnet build ./MiniApps.Tests/MiniApps.Tests.csproj -c Release -f net10.0-window
 `Publish.ps1` tạo ZIP, checksum và manifest trong `artifacts/`. Push source không tự tạo GitHub Release, không upload asset và không đổi bản mà lệnh `irm` đang tải.
 
 ```powershell
-./Publish.ps1 -Target net48 -Runtime win-x64 -Version <version>
+./Publish.ps1 -Target both -Runtime win-x64 -Version <version>
 ```
 
 Chỉ phát lệnh `irm` cho người dùng sau khi các asset của Release tồn tại và đã được xác minh. Xem [DEVELOPMENT.md](docs/DEVELOPMENT.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md) và [CURRENT-STATE.md](docs/CURRENT-STATE.md) để biết chi tiết.
