@@ -1,5 +1,9 @@
 # Trạng thái bàn giao
 
+## Phát hành v0.4.1 — 2026-09-30
+
+Theo yêu cầu người dùng (chỉ build net48): AI chạy `Publish.ps1 -Target net48 -Version 0.4.1` và `gh release create v0.4.1` (target 863e6334c14809a8dcddadb8be858d051b723f0b). ZIP net48 545253 bytes, SHA-256 `3a6a4c19638b0ac543527e2a3daf31d82db6553c2dab4863c8f4857ab0f6579e`. Gói net10 là bản v0.3.6 dùng lại nguyên byte (63080335 bytes, `e1cbb8c3…f515`) do Publish.ps1 mặc định như vậy: fallback net10 của v0.4.1 cũ hơn v0.4.0 và chưa có HỦY/CLEAN mới; cập nhật khi người dùng yêu cầu net10. Trước upload: giải nén, ProductVersion 0.4.1+863e633, `--validate-config` và `--preview --startup-smoke-test` thoát 0. Sau upload: tải lại 5 asset đều 200, trùng byte. Bootstrap chuyển sang v0.4.1; Test-Bootstrap 8/8. Chưa chạy CLEAN thật.
+
 ## Sửa CLEAN — 2026-09-30
 
 Người dùng báo CLEAN lỗi. Chẩn đoán chỉ-đọc trên máy phát triển: 600 file chỉ-đọc trong TEMP bị giữ lại và tính là bỏ qua (luôn "Chưa dọn hết"), đường dẫn >260 ký tự không truy cập được trên net48, Chrome đang chạy nên cả trình duyệt bị bỏ qua. Đã code: bỏ cờ ReadOnly trước khi xóa, tiền tố `\\?\` cho đường dẫn dài, không có quyền trong TEMP tính là "đang được dùng"; thêm C:\Windows\Temp, Recent của Windows (thư mục Recent, jump list, MRU Explorer trong HKCU, giữ ghim Quick access); tự đóng trình duyệt (người dùng chọn) sau khi kiểm tra phạm vi. Test net48 88 PASS + WPF; build net48 vào `artifacts/clean-fix-20260930` kèm ReleaseConfig. Chưa build/test net10 (source dùng chung đã đổi). Chưa chạy CLEAN thật; chưa phát hành. Chi tiết: docs/CLEAN.md.
