@@ -14,6 +14,10 @@ dotnet build ./MiniApps.Tests/MiniApps.Tests.csproj -c Release -f net48
 
 Test hiện dùng fake runner/download và WPF mô phỏng, không chạy installer hoặc Windows settings thật. Khi sửa `MiniApps/Scripts/Split-Disk.ps1`, chạy `./Test-SplitDisk.ps1` (dùng lệnh ổ đĩa giả, không đụng ổ thật). Khi sửa bootstrap, chạy riêng:
 
+CLEAN có fixture tự động trong MiniApps.Tests/CleanTests.cs, chỉ xóa dữ liệu giả do test tạo. Không gọi CleanService.RunAsync hoặc bấm CLEAN thật để test trên máy người dùng; xem docs/CLEAN.md. Kiểm thử junction/hard link dùng NTFS và SQLite của Windows.
+
+HỦY có fixture DeploymentCancelTests: chạy PowerShell và tiến trình test chỉ ghi PID/chờ, kiểm tra kill cây con (kể cả cha đã thoát), nhiều tiến trình song song, giữ tiến trình không liên quan, giữ app nền khi thành công và khi HỦY tác vụ khác sau khi tác vụ của nó đã xong, UTF-8/mã lỗi và service thật với script giả. WPF preview kiểm tra HỦY đỏ, từ chối/đồng ý, khóa trong lúc hủy và thử lại. Không chạy installer hay Windows settings thật. Cần người dùng thử riêng trên VM trước khi tin cậy với bộ cài MSI/EXE thực; dịch vụ hệ thống ngoài Job có thể tiếp tục xử lý.
+
 ```powershell
 & ./Test-Bootstrap.ps1
 ```

@@ -5,14 +5,19 @@ using MiniApps.Services;
 using MiniApps.ViewModels;
 
 var passed = 0;
+if (args.Length > 0 && args[0].StartsWith("--job-", StringComparison.Ordinal))
+{
+    DeploymentCancelTests.Fixture(args);
+    return;
+}
 if (args.Contains("--information-audit"))
 {
+    var auditClock = System.Diagnostics.Stopwatch.StartNew();
     var report = await InformationService.ReadAsync(CancellationToken.None);
-    var required = new[] { "Hệ điều hành", "Vi xử lý", "Bộ nhớ", "Đồ họa", "Lưu trữ", "Màn hình" };
-    if (report.Model == "—" || report.Serial == "—" || !report.Sections.Select(section => section.Title).SequenceEqual(required) ||
-        report.Sections.SelectMany(section => section.Facts).Any(fact => string.IsNullOrWhiteSpace(fact.Value)))
-        throw new Exception("Information collection failed.");
-    Console.WriteLine($"PASS embedded Information script: {report.Sections.Count} sections, {report.Sections.Sum(section => section.Facts.Count + section.Items.Count)} values; device values omitted.");
+    if (report.Section("Hệ điều hành")!.Facts[0].Value == "—" ||
+        report.Section("Hệ điều hành")!.Facts[2].Value == "—")
+        throw new Exception("Minimal Information collection failed.");
+    Console.WriteLine($"PASS embedded minimal Information reader: {auditClock.ElapsedMilliseconds} ms; device values omitted.");
     return;
 }
 void Check(string name, Action action) { action(); Console.WriteLine("PASS " + name); passed++; }
@@ -166,9 +171,9 @@ try
         vm.Page = 3;
         Assert(vm.Page == 2 && vm.IsExtend);
     });
-    Check("EXTEND lists the C++ environment and Share LAN", () => {
+    Check("EXTEND lists the add-ons supported by its target", () => {
         var vm = new MainViewModel(true);
-        Assert(vm.Extensions.Select(e => e.Id).SequenceEqual(new[] { "cpp", "sharelan" }));
+        Assert(vm.Extensions.Select(e => e.Id).SequenceEqual(new[] { "cpp", "sharelan", "clean" }));
         Assert(vm.Extensions.All(e => e.Name.Length > 0 && e.Description.Length > 0 && e.Status == "Sẵn sàng"));
         Assert(vm.Extensions.Where(e => !e.Interactive).All(e => e.ConfirmText.Length > 0) && vm.Extensions.Single(e => e.Interactive).Id == "sharelan");
         Assert(vm.Extensions.All(e => vm.RunExtensionCommand.CanExecute(e) && !vm.OpenExtensionLogCommand.CanExecute(e)));
@@ -231,6 +236,14 @@ try
         var run = ExtensionService.RunScriptFileAsync(script, dir, new InlineProgress<string>(line => { lock (lines) lines.Add(line); }));
         WaitWithTimeout(run, TimeSpan.FromSeconds(60)).GetAwaiter().GetResult();
         Assert(run.Result == 7 && lines.Contains("Tiếng Việt có dấu") && lines.Contains("lỗi thử") && lines.Contains("sau ReadKey"));
+    });
+    Check("Information embeds only the minimal collector", () => {
+        using var stream = typeof(InformationService).Assembly.GetManifestResourceStream("MiniApps.Information.ps1")!;
+        using var reader = new StreamReader(stream);
+        var source = reader.ReadToEnd();
+        Assert(source.Contains("Win32_BIOS") && source.Contains("SoftwareLicensingProduct"));
+        foreach (var forbidden in new[] { "Get-SystemData", "Add-Type", "Win32_Processor", "Win32_PhysicalMemory", "Win32_VideoController", "Get-Disk", "Get-PhysicalDisk", "slmgr", "nvidia-smi" })
+            Assert(!source.Contains(forbidden));
     });
     Check("Information Driver copies serial before opening official support", () => {
         var serial = InformationService.Parse("""{"OS":"Windows","Serial":"ABC123","Manufacturer":"Dell Inc."}""");
@@ -489,7 +502,7 @@ try
         service.RunAsync(apps, [], Path.Combine(root, "mixed"), new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(_ => { }), default).GetAwaiter().GetResult();
         Assert(msiCalls == 2 && outcomes.Count(e => e.Finished && !e.Failed) == 3);
     });
-    Check("Cancellation keeps current installer alive and stops queued work", () =>
+    Check("Cancellation stops queued work and records cancelled tasks", () =>
     {
         using var cancel = new CancellationTokenSource();
         using var client = new System.Net.Http.HttpClient(new FakeHttp());
@@ -497,7 +510,7 @@ try
         var service = new DeploymentService(client, async (_, _, _) => { Interlocked.Increment(ref calls); cancel.Cancel(); await Task.Delay(25); return 0; }, _ => false);
         var outcomes = new System.Collections.Concurrent.ConcurrentBag<DeploymentEvent>();
         service.RunAsync(Catalog.Defaults().Take(4).ToArray(), [], Path.Combine(root, "cancel"), new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(_ => { }), cancel.Token).GetAwaiter().GetResult();
-        Assert(calls >= 1 && calls <= 4 && outcomes.Count(e => e.Status == "Hoàn tất") == calls && outcomes.Count(e => e.Status == "Đã hủy") == 4 - calls);
+        Assert(calls >= 1 && calls <= 4 && outcomes.Count(e => e.Status == "Hoàn tất") == 0 && outcomes.Count(e => e.Status == "Đã hủy") == 4);
     });
     Check("1618 retries are bounded and cancellation stops retries", () => {
         using var client = new System.Net.Http.HttpClient(new FakeHttp());
@@ -524,7 +537,7 @@ try
         }, _ => false);
         var outcomes = new System.Collections.Concurrent.ConcurrentBag<DeploymentEvent>();
         service.RunAsync(Catalog.Defaults().Take(4).ToArray(), WindowsSettingsCatalog.Defaults().Take(1).ToArray(), Path.Combine(root, "cancel-active"), new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(_ => { }), cancel.Token).GetAwaiter().GetResult();
-        Assert(calls == 5 && completed == 5 && outcomes.Count(e => e.Status == "Hoàn tất") == 5);
+        Assert(calls == 5 && completed == 5 && outcomes.Count(e => e.Status == "Đã hủy") == 5);
     });
     Check("Installer failure and reboot codes are reported truthfully", () =>
     {
@@ -653,6 +666,8 @@ try
         Assert(reads == 2 && handler.Calls == 1 && launches == 0);
         Assert(outcomes.Any(item => item.Status == "Đã cài trong lúc chờ · bỏ qua" && item.Finished && !item.Failed));
     });
+    CleanTests.Run(root, Check);
+    DeploymentCancelTests.Run(root, Check);
     Check("A reused built-in ID cannot silently use the old product detector", () =>
     {
         var changed = new AppDefinition { Id = "chrome", Name = "Chromium", Url = "https://example.com/chromium.exe" };
@@ -733,9 +748,52 @@ var renderThread = new Thread(() =>
             using var output = File.Create(Path.Combine(targetDir, name)); encoder.Save(output);
         }
         vm.Page = 0;
+        // Answers: decline HỦY, accept HỦY, decline exit, accept exit, accept HỦY on retry.
+        var cancelAnswers = new Queue<bool>([false, true, false, true, true]);
+        var cancelVm = new MainViewModel(true, confirm: _ => cancelAnswers.Dequeue());
+        window.DataContext = cancelVm;
+        void WaitCancelled()
+        {
+            var cancelFrame = new System.Windows.Threading.DispatcherFrame();
+            var cancelClock = System.Diagnostics.Stopwatch.StartNew();
+            var cancelTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(20) };
+            cancelTimer.Tick += (_, _) => { if (!cancelVm.IsBusy || cancelClock.Elapsed.TotalSeconds > 5) cancelFrame.Continue = false; };
+            cancelTimer.Start(); System.Windows.Threading.Dispatcher.PushFrame(cancelFrame); cancelTimer.Stop();
+            window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+            if (cancelVm.IsBusy || cancelVm.InstallFinished || cancelVm.IsCancelButton || !cancelVm.InstallCommand.CanExecute(null) ||
+                cancelVm.InstallButtonText != "Cài đặt" || !cancelVm.Summary.StartsWith("Đã hủy")) throw new Exception("Cancelled install must unlock retry without reporting success.");
+        }
+        window.Dispatcher.Invoke(() => cancelVm.InstallCommand.Execute(null));
+        Capture("install-cancel-red.png");
+        var cancelButton = (System.Windows.Controls.Button)window.FindName("InstallButton");
+        if (!cancelButton.IsEnabled || (string)cancelButton.Content != "HỦY" || cancelVm.ShowInstallCancel ||
+            ((System.Windows.Media.SolidColorBrush)cancelButton.Background).Color != System.Windows.Media.Color.FromRgb(198, 40, 40))
+            throw new Exception("Install must become a single enabled red HỦY button.");
+        window.Dispatcher.Invoke(() => cancelVm.InstallCommand.Execute(null));
+        if (cancelVm.IsCancellingInstall || !cancelVm.IsBusy) throw new Exception("Declining cancellation must keep the run active.");
+        if (cancelVm.ConfirmExitWhileCancelling()) throw new Exception("Exit must not be offered before HỦY is confirmed.");
+        window.Dispatcher.Invoke(() => {
+            cancelVm.InstallCommand.Execute(null);
+            if (!cancelVm.IsCancellingInstall || cancelVm.InstallCommand.CanExecute(null) || cancelVm.InstallButtonText != "ĐANG HỦY…")
+                throw new Exception("Cancellation must disable repeated clicks until drained.");
+            // A hung process must not trap the user: exit is offered while cancelling, and only on Yes.
+            if (cancelVm.ConfirmExitWhileCancelling() || !cancelVm.ConfirmExitWhileCancelling())
+                throw new Exception("Exit while cancelling must follow the user's answer.");
+        });
+        WaitCancelled();
+        if (cancelVm.ProgressRows.Any(r => r.Status.StartsWith("Đang") || r.Status.StartsWith("Chờ")) ||
+            cancelVm.WindowsTaskDetails.Any(r => r.Status.StartsWith("Đang") || r.Status.StartsWith("Chờ"))) throw new Exception("Cancelled rows still look active.");
+        window.Dispatcher.Invoke(() => cancelVm.InstallCommand.Execute(null));
+        if (!cancelVm.IsInstallRunning || cancelVm.InstallButtonText != "HỦY") throw new Exception("Retry did not start.");
+        window.Dispatcher.Invoke(() => cancelVm.InstallCommand.Execute(null));
+        WaitCancelled();
+        if (cancelAnswers.Count != 0) throw new Exception("Expected cancellation confirmations.");
+        window.DataContext = vm;
+        Console.WriteLine("PASS WPF red HỦY button, declined/accepted cancellation, pending lock, exit while cancelling, cancelled rows and retry");
         var chromeRow = vm.ReadyApps.Single(r => r.Definition.Id == "chrome");
         window.Dispatcher.Invoke(() => vm.InstallOneCommand.Execute(chromeRow));
-        if (!vm.IsBusy || vm.InstallCommand.CanExecute(null) || vm.InstallOneCommand.CanExecute(vm.ReadyApps[0]))
+        if (!vm.IsBusy || vm.InstallOneCommand.CanExecute(vm.ReadyApps[0]) ||
+            !vm.InstallCommand.CanExecute(null) || vm.InstallButtonText != "HỦY")
             throw new Exception("A single install must lock the other install actions while it runs.");
         var singleFrame = new System.Windows.Threading.DispatcherFrame();
         var singleStarted = DateTime.UtcNow;
@@ -820,7 +878,7 @@ var renderThread = new Thread(() =>
         publicWindow.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
         publicWindow.UpdateLayout();
         var extensionList = (System.Windows.Controls.ItemsControl)publicWindow.FindName("ExtensionList");
-        if (!publicVm.IsExtend || !extensionList.IsVisible || extensionList.Items.Count != 2 ||
+        if (!publicVm.IsExtend || !extensionList.IsVisible || extensionList.Items.Count != publicVm.Extensions.Count ||
             Enumerable.Range(0, extensionList.Items.Count).Any(i =>
                 FindChildren<System.Windows.Controls.Button>((System.Windows.DependencyObject)extensionList.ItemContainerGenerator.ContainerFromIndex(i))
                     .SingleOrDefault(button => button.Name == "RunButton")?.IsEnabled != true))
@@ -859,6 +917,22 @@ var renderThread = new Thread(() =>
             !extendVm.InstallCommand.CanExecute(null) || !extendVm.RunExtensionCommand.CanExecute(cppItem) || answers.Count != 0)
             throw new Exception($"The add-on run did not finish cleanly: {cppItem.Status} / {cppItem.Detail}.");
         Console.WriteLine("PASS WPF EXTEND run asks first, locks installs and reports its result");
+        var cleanAnswers = new Queue<bool>(new[] { false, true });
+        var cleanVm = new MainViewModel(true, confirm: _ => cleanAnswers.Dequeue());
+        var cleanItem = cleanVm.Extensions.Single(item => item.Id == "clean");
+        publicWindow.Dispatcher.Invoke(() => cleanVm.RunExtensionCommand.Execute(cleanItem));
+        if (cleanVm.IsBusy || cleanItem.Status != "Sẵn sàng") throw new Exception("Declining CLEAN must do nothing.");
+        publicWindow.Dispatcher.Invoke(() => cleanVm.RunExtensionCommand.Execute(cleanItem));
+        if (!cleanVm.IsBusy || cleanVm.InstallCommand.CanExecute(null) || cleanVm.RunExtensionCommand.CanExecute(cleanItem))
+            throw new Exception("CLEAN must lock other install/clean runs.");
+        var cleanFrame = new System.Windows.Threading.DispatcherFrame();
+        var cleanStart = DateTime.UtcNow;
+        var cleanTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+        cleanTimer.Tick += (_, _) => { if (!cleanVm.IsBusy || (DateTime.UtcNow - cleanStart).TotalSeconds > 10) cleanFrame.Continue = false; };
+        cleanTimer.Start(); System.Windows.Threading.Dispatcher.PushFrame(cleanFrame); cleanTimer.Stop();
+        if (cleanVm.IsBusy || cleanItem.Status != "Hoàn tất" || cleanAnswers.Count != 0)
+            throw new Exception("CLEAN preview must finish without touching the filesystem.");
+        Console.WriteLine("PASS WPF CLEAN confirmation, shared lock and preview (no actual cleaning)");
         var wpsVm = new MainViewModel(true) { SelectedSuite = "WPS" };
         publicWindow.Dispatcher.Invoke(() => wpsVm.InstallCommand.Execute(null));
         var wpsFrame = new System.Windows.Threading.DispatcherFrame();
@@ -869,6 +943,8 @@ var renderThread = new Thread(() =>
         if (wpsVm.IsBusy || wpsVm.WindowsTaskDetails.Count != 12 || wpsVm.WindowsTaskDetails[0].Name != "Gỡ Microsoft Office" || wpsVm.WindowsTaskDetails[0].Progress != 100)
             throw new Exception($"Installing WPS must first remove Microsoft Office: {string.Join(", ", wpsVm.WindowsTaskDetails.Select(t => t.Name))}.");
         Console.WriteLine("PASS WPF WPS install removes Microsoft Office as a Windows task");
+        var heightBeforeInformation = publicWindow.Height;
+        var widthBeforeInformation = publicWindow.Width;
         publicVm.Page = 1;
         publicVm.Page = 3;
         publicWindow.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
@@ -878,8 +954,17 @@ var renderThread = new Thread(() =>
         var information = ((System.Windows.Controls.Grid)publicWindow.FindName("PageHost")).Children.OfType<MiniApps.InformationView>().Single();
         var leftSections = (System.Windows.Controls.ItemsControl)information.FindName("LeftSections");
         var rightSections = (System.Windows.Controls.ItemsControl)information.FindName("RightSections");
-        if (!information.IsVisible || leftSections.Items.Count != 3 || rightSections.Items.Count != 3)
-            throw new Exception($"Information did not display its preview data in two columns: visible={information.IsVisible}, left={leftSections.Items.Count}, right={rightSections.Items.Count}, status={((System.Windows.Controls.TextBlock)information.FindName("StatusText")).Text}.");
+        if (Math.Abs(publicWindow.Width - widthBeforeInformation) > 1 ||
+            Math.Abs(publicWindow.Height - heightBeforeInformation) > 1 ||
+            publicWindow.MinWidth != 940 || publicWindow.MinHeight != 660 ||
+            MiniApps.InstallLayout.DescriptionVisibility != System.Windows.Visibility.Collapsed ||
+            ((System.Windows.Controls.TextBlock)publicWindow.FindName("InstallHint")).Text != "WPS / OnlyOffice / LibreOffice sẽ gỡ Microsoft Office.")
+            throw new Exception("Information must retain the shared window size and concise installation notice.");
+        if (!information.IsVisible || leftSections.Items.Count != 1 || rightSections.Items.Count != 0 ||
+            rightSections.Visibility != System.Windows.Visibility.Collapsed ||
+            ((System.Windows.Controls.TextBox)information.FindName("DeviceHeading")).Text != "HOST · MINI-PC" ||
+            ((System.Windows.FrameworkElement)information.FindName("DeviceMaker")).Visibility != System.Windows.Visibility.Collapsed)
+            throw new Exception("Information must show only HOST, Serial, Driver and the operating system.");
         Console.WriteLine("PASS Information navigation and embedded data view");
         var heldRead = new TaskCompletionSource<InformationReport>();
         var slowInformation = new MiniApps.InformationView(_ => heldRead.Task);
@@ -972,9 +1057,13 @@ var renderThread = new Thread(() =>
         var rightColumn = (System.Windows.FrameworkElement)information.FindName("RightSections");
         var leftX = leftColumn.TranslatePoint(new System.Windows.Point(), information).X;
         var rightX = rightColumn.TranslatePoint(new System.Windows.Point(), information).X;
-        if (rightX - leftX < leftColumn.ActualWidth || Math.Abs(leftColumn.ActualWidth - rightColumn.ActualWidth) > 1 ||
-            Math.Max(leftColumn.ActualHeight, rightColumn.ActualHeight) > 1.6 * Math.Min(leftColumn.ActualHeight, rightColumn.ActualHeight))
-            throw new Exception($"Information sections must sit in two balanced columns: left={leftColumn.ActualWidth}x{leftColumn.ActualHeight}, right={rightColumn.ActualWidth}x{rightColumn.ActualHeight}.");
+        var visibleSections = leftSections.Items.Cast<InformationSection>().ToArray();
+        if (visibleSections.Length != 1 || visibleSections[0].Title != "Hệ điều hành" ||
+            visibleSections[0].Facts.Count != 2 || visibleSections[0].Items.Count != 0 ||
+            rightColumn.IsVisible || System.Windows.Controls.Grid.GetColumnSpan(leftColumn) != 3)
+            throw new Exception("Hardware sections must not be displayed.");
+        if (MiniApps.InstallLayout.ReadyPadding.Top != 6 || MiniApps.InstallLayout.ProgressMinHeight != 48)
+            throw new Exception("Install cards must use the compact dimensions.");
         var sparse = InformationService.Parse("""{"OS":"Windows 10 Pro","CPU":"Intel Core i5","Serial":"S1","Manufacturer":"Dell Inc."}""");
         if (sparse.Section("Bộ nhớ")!.Facts.Any(fact => fact.Label == "Loại") || sparse.Section("Bộ nhớ")!.Facts.Single().Value != "—" ||
             sparse.Section("Lưu trữ")!.Items.Single().Title != "—" || sparse.Maker != "Dell Inc." ||
@@ -982,27 +1071,24 @@ var renderThread = new Thread(() =>
             throw new Exception("Unknown optional values must be left out and an unconfirmed licence flagged.");
         if (layout.Section("Hệ điều hành")!.Facts[1].Tone != "good" || !layout.ToText().Contains("Khe 2 · 16 GB · Samsung · DDR5 · 5600 MT/s"))
             throw new Exception("Status tone or the copied report is wrong.");
-        Console.WriteLine("PASS Information sections sit in two balanced columns and unknown values are left out");
-        // The window fits the Information data, and gives the previous height back on other pages.
-        var informationScroll = (System.Windows.Controls.ScrollViewer)information.FindName("InformationScroll");
-        publicWindow.FitInformationHeight();
+        Console.WriteLine("PASS Information target-specific layout and unknown values");
+        // Every page keeps the shared window size.
+        var sharedWidth = publicWindow.Width;
+        var sharedHeight = publicWindow.Height;
+        foreach (var page in new[] { 0, 1, 2, 1 })
+        {
+            publicVm.Page = page;
+            publicWindow.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+            publicWindow.UpdateLayout();
+            if (Math.Abs(publicWindow.Width - sharedWidth) > 1 || Math.Abs(publicWindow.Height - sharedHeight) > 1 ||
+                publicWindow.MinWidth != 940 || publicWindow.MinHeight != 660)
+                throw new Exception("Switching pages must not resize the window.");
+        }
+        information.ReloadAsync().GetAwaiter().GetResult();
         publicWindow.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
-        publicWindow.UpdateLayout();
-        var workHeight = System.Windows.SystemParameters.WorkArea.Height;
-        if (Math.Abs(informationScroll.ExtentHeight - informationScroll.ViewportHeight) > 2 && Math.Abs(publicWindow.ActualHeight - workHeight) > 1)
-            throw new Exception($"Information must fit its window: extent={informationScroll.ExtentHeight}, viewport={informationScroll.ViewportHeight}, window={publicWindow.ActualHeight}.");
-        var fitView = (System.Windows.FrameworkElement)publicWindow.Content;
-        var fitBitmap = new System.Windows.Media.Imaging.RenderTargetBitmap((int)fitView.ActualWidth, (int)fitView.ActualHeight, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
-        fitBitmap.Render(fitView);
-        var fitEncoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
-        fitEncoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(fitBitmap));
-        using (var output = File.Create(Path.Combine(targetDir, "information-fit.png"))) fitEncoder.Save(output);
-        publicVm.Page = 0;
-        publicWindow.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
-        if (publicWindow.Height != 810 || publicWindow.MinHeight != 660)
-            throw new Exception($"Leaving Information must give the window its height back: {publicWindow.Height}/{publicWindow.MinHeight}.");
-        publicVm.Page = 1;
-        Console.WriteLine("PASS Information window fits its data and restores the height elsewhere");
+        if (Math.Abs(publicWindow.Width - sharedWidth) > 1 || Math.Abs(publicWindow.Height - sharedHeight) > 1)
+            throw new Exception("Refreshing Information must not resize the window.");
+        Console.WriteLine("PASS Information keeps the shared window size across navigation and refresh");
         publicWindow.Close();
         Console.WriteLine("PASS WPF navigation exposes the supported pages");
         application.Shutdown();

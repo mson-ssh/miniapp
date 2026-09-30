@@ -11,7 +11,9 @@ public partial class MainWindow : Window
     public MainWindow(MainViewModel model)
     {
         InitializeComponent(); this.model = model; DataContext = model;
-        defaultMinHeight = MinHeight;
+        // Keep the consequential Office-removal notice, omit the generic instructions.
+        InstallHint.Text = "WPS / OnlyOffice / LibreOffice sẽ gỡ Microsoft Office.";
+        InstallHint.Margin = new Thickness(0, 8, 0, 0);
         var information = this.information = new InformationView(model.IsPreview
             ? _ => Task.FromResult(Services.InformationService.Parse(Services.InformationService.PreviewJson))
             : null, preview: model.IsPreview) { Visibility = model.Page == 1 ? Visibility.Visible : Visibility.Collapsed };
@@ -20,47 +22,23 @@ public partial class MainWindow : Window
         {
             if (e.PropertyName != nameof(MainViewModel.Page)) return;
             information.Visibility = model.Page == 1 ? Visibility.Visible : Visibility.Collapsed;
-            if (model.Page == 1) FitInformationLater();
-            else RestoreHeightOutsideInformation();
         };
-        information.ContentShown += FitInformationLater;
         model.PropertyChanged += onPageChanged;
         Closed += (_, _) => { model.PropertyChanged -= onPageChanged; information.Dispose(); };
     }
-    // Information fits its window to its data: shorter or taller as the machine reports more or
-    // less, never past the screen. Other pages get their previous height back.
-    private const double InformationMinHeight = 480;
+    // Every page, Information included, keeps the window size the user has.
     private InformationView? information;
-    private double defaultMinHeight;
-    private double? heightOutsideInformation;
-    private void FitInformationLater() =>
-        Dispatcher.BeginInvoke(new Action(FitInformationHeight), System.Windows.Threading.DispatcherPriority.ContextIdle);
-    internal void FitInformationHeight()
-    {
-        if (information == null || model.Page != 1 || WindowState != WindowState.Normal || !information.HasData) return;
-        UpdateLayout();
-        var overflow = information.ContentOverflow;
-        if (Math.Abs(overflow) < 1) return;
-        heightOutsideInformation ??= Height;
-        MinHeight = InformationMinHeight;
-        var work = SystemParameters.WorkArea;
-        var target = Math.Max(MinHeight, Math.Min(work.Height, ActualHeight + overflow));
-        Height = target;
-        // Keep the grown window on screen; a window placed off-screen on purpose is left alone.
-        if (Top >= work.Top && Top + target > work.Bottom) Top = Math.Max(work.Top, work.Bottom - target);
-    }
-    private void RestoreHeightOutsideInformation()
-    {
-        if (heightOutsideInformation is not { } height) return;
-        MinHeight = defaultMinHeight;
-        Height = height;
-        heightOutsideInformation = null;
-    }
     private void OnClosing(object? sender, CancelEventArgs e)
     {
         if (!model.IsBusy) return;
+        if (model.IsCancellingInstall)
+        {
+            if (!model.ConfirmExitWhileCancelling()) e.Cancel = true;
+            return;
+        }
         e.Cancel = true;
-        MessageBox.Show("Đang có tác vụ cài đặt. Chọn ‘Dừng hàng đợi’ rồi chờ bộ cài hiện tại kết thúc trước khi thoát.",
+        MessageBox.Show(
+            model.IsInstallRunning ? "Đang có tác vụ cài đặt. Bấm HỦY và chờ tiến trình dừng trước khi thoát. Nếu tiến trình bị treo khi đang hủy, đóng cửa sổ lần nữa để chọn thoát ngay." : "Đang chạy tác vụ EXTEND. Hãy chờ tác vụ kết thúc trước khi thoát.",
             "MiniApps", MessageBoxButton.OK, MessageBoxImage.Information);
     }
     private void OnProgressCardClick(object sender, MouseButtonEventArgs e)

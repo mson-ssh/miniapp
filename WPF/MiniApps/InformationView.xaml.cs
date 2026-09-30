@@ -18,17 +18,12 @@ public partial class InformationView : UserControl, IDisposable
     private readonly DispatcherTimer loadingTimer = new() { Interval = TimeSpan.FromMilliseconds(50) };
     private double loadingProgress;
     internal int LoadingPercentShown { get; private set; }
-    // Raised once fresh data is on screen, so the window can size itself to it.
-    internal event Action? ContentShown;
-    internal bool HasData => report != null && !loading;
-    // How much taller (positive) or shorter (negative) the data is than the space it has now.
-    internal double ContentOverflow
-    {
-        get { InformationScroll.UpdateLayout(); return InformationScroll.ExtentHeight - InformationScroll.ViewportHeight; }
-    }
     internal InformationView(Func<CancellationToken, Task<InformationReport>>? read = null, bool preview = false)
     {
         InitializeComponent();
+        DeviceMaker.Visibility = Visibility.Collapsed;
+        RightSections.Visibility = Visibility.Collapsed;
+        Grid.SetColumnSpan(LeftSections, 3);
         this.read = read ?? InformationService.ReadAsync;
         this.preview = preview;
         IsVisibleChanged += async (_, _) => { if (IsVisible && report == null) await ReloadAsync(); };
@@ -55,7 +50,6 @@ public partial class InformationView : UserControl, IDisposable
         LoadingPanel.Visibility = Visibility.Collapsed;
         // A failed refresh keeps showing the data read earlier.
         InformationContent.Visibility = report != null ? Visibility.Visible : Visibility.Collapsed;
-        if (report != null) ContentShown?.Invoke();
     }
     internal async Task ReloadAsync()
     {
@@ -82,6 +76,14 @@ public partial class InformationView : UserControl, IDisposable
     {
         report = value;
         InformationContent.DataContext = value;
+        // Presentation only: preserve the collector and manufacturer used by Driver.
+        var os = value.Section("Hệ điều hành");
+        DeviceHeading.Text = "HOST · " + (os?.Facts.FirstOrDefault(fact => fact.Label == "Tên máy")?.Value ?? "—");
+        LeftSections.ItemsSource = os == null ? Array.Empty<InformationSection>() : new[]
+        {
+            new InformationSection(os.Title, os.Facts.Where(fact => fact.Label != "Tên máy").ToArray(), Array.Empty<InformationItem>())
+        };
+        RightSections.ItemsSource = Array.Empty<InformationSection>();
         CopyButton.IsEnabled = true;
     }
     private async void RefreshInformation(object sender, RoutedEventArgs e) => await ReloadAsync();

@@ -19,6 +19,7 @@ public sealed class DeploymentService
     private readonly Func<AppDefinition, InstalledSoftwareSnapshot, SoftwareDetectionResult> detectInstalledSoftware;
     private readonly Func<TimeSpan, CancellationToken, Task> delay;
     private readonly Func<int> getWindowsBuild;
+    private readonly bool useOwnedProcesses;
     public DeploymentService(HttpClient? http = null, Func<string, string, IProgress<string>, Task<int>>? run = null,
         Func<AppDefinition, bool>? installed = null, Func<TimeSpan, CancellationToken, Task>? delay = null,
         Func<int>? getWindowsBuild = null
@@ -28,6 +29,7 @@ public sealed class DeploymentService
     {
         this.http = http ?? DefaultHttp;
         this.run = run ?? RunPowerShellAsync;
+        useOwnedProcesses = run == null;
         installedOverride = installed;
         this.loadInstalledSoftware = loadInstalledSoftware ?? InstalledSoftwareDetector.Capture;
         this.detectInstalledSoftware = detectInstalledSoftware ?? InstalledSoftwareDetector.Detect;
@@ -48,6 +50,14 @@ public sealed class DeploymentService
         Catalog.Validate(apps);
         WindowsSettingsCatalog.Validate(options);
         Directory.CreateDirectory(workDir);
+        using var processGroup = useOwnedProcesses ? new DeploymentProcessGroup(token, log) : null;
+        async Task<int> RunOwned(string command)
+        {
+            token.ThrowIfCancellationRequested();
+            var code = processGroup != null ? await processGroup.RunAsync(command, workDir, log) : await run(command, workDir, log);
+            token.ThrowIfCancellationRequested();
+            return code;
+        }
         var windowsBuild = options.Count == 0 ? WindowsCompatibility.MinimumWindowsBuild : getWindowsBuild();
         using var msiInstallSlot = new SemaphoreSlim(1);
         Task<InstalledSoftwareSnapshot?> snapshotTask = installedOverride == null
@@ -117,8 +127,8 @@ public sealed class DeploymentService
                         token.ThrowIfCancellationRequested();
                         events.Report(new(app.Id, string.IsNullOrWhiteSpace(app.Arguments) ? "Đang cài · hãy thao tác trong bộ cài" : "Đang cài đặt", 100));
                         log.Report(app.WaitInstallerOnly ? $"{app.Name}: bắt đầu bộ cài. Chờ bộ cài kết thúc, không chờ ứng dụng nó mở." : $"{app.Name}: bắt đầu bộ cài. Chờ toàn bộ tiến trình con kết thúc.");
-                        // No forced cancellation once an installer starts: rollback is installer-specific.
-                        code = await run(command, workDir, log);
+                        // Explicit cancellation terminates the task's owned job; it cannot roll back changes.
+                        code = await RunOwned(command);
                     }
                     finally
                     {
@@ -172,14 +182,18 @@ public sealed class DeploymentService
                     File.WriteAllText(script, option.Script, new UTF8Encoding(true));
                 }, token);
                 var command = $"& {Quote(script)}; if (-not $?) {{ throw 'Windows setting failed.' }}";
-                var code = await run(command, workDir, log);
+                var code = await RunOwned(command);
                 if (code != 0) throw new InvalidOperationException($"Mã lỗi {code}.");
                 events.Report(new(option.TaskId, "Hoàn tất", 100, true));
             }
             catch (OperationCanceledException) { events.Report(new(option.TaskId, "Đã hủy", 0, true)); }
             catch (Exception ex) { log.Report($"Windows/{option.Name}: {ex.Message}"); events.Report(new(option.TaskId, "Thất bại", 0, true, true)); }
         }).ToArray();
-        await Task.WhenAll(appTasks.Concat(settingTasks));
+        try { await Task.WhenAll(appTasks.Concat(settingTasks)); }
+        finally
+        {
+            if (processGroup != null) await processGroup.DrainCancellationAsync();
+        }
 
         void ReportDetection(AppDefinition app, SoftwareDetectionResult result, string phase)
         {

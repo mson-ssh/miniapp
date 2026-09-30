@@ -5,8 +5,8 @@ namespace MiniApps.Services;
 
 public sealed record ExtensionRunResult(int ExitCode, string LogPath);
 
-// Runs one EXTEND add-on: its PowerShell script (embedded in the assembly) in a hidden
-// Windows PowerShell 5.1 process, with every output line reported and kept in a log file.
+// Scripted EXTEND add-ons run embedded PowerShell in a hidden process with a log.
+// CLEAN uses its bounded in-process cleaner instead, with the same result contract.
 public sealed class ExtensionService(Func<string, string, IProgress<string>, Task<int>>? runScript = null)
 {
     // Tests point this at a temporary folder so they leave no logs on the machine.
@@ -56,6 +56,7 @@ public sealed class ExtensionService(Func<string, string, IProgress<string>, Tas
 
     public async Task<ExtensionRunResult> RunAsync(string extensionId, IProgress<string> progress)
     {
+        if (extensionId == "clean") return await CleanService.RunAsync(progress);
         var scripts = ScriptsFor(extensionId);
         var workDir = Path.Combine(WorkFolderCleaner.DefaultRoot, "work-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(workDir);

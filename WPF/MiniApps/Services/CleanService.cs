@@ -1,0 +1,305 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
+using System.Text;
+
+namespace MiniApps.Services;
+
+internal sealed record CleanScope(string UserRoot, string Local, string Roaming, string Temp,
+    IReadOnlyList<string> ProtectedPaths);
+// Skipped: not cleaned and worth a look (browser open, link, unknown schema). InUse: TEMP files held
+// by a running program, which is normal and does not make the run incomplete.
+internal sealed record CleanResult(int DeletedFiles, long Bytes, int Skipped, int HistoryDatabases, int InUse = 0);
+
+internal static class CleanService
+{
+    // An over-the-shoulder UAC login must not silently clean the administrator's profile.
+    private static void CheckInteractiveIdentity()
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        var session = Process.GetCurrentProcess().SessionId;
+        var found = false;
+        foreach (var explorer in Process.GetProcessesByName("explorer"))
+        {
+            using (explorer)
+            {
+                if (explorer.SessionId != session) continue;
+                if (!OpenProcessToken(explorer.Handle, 8, out var token))
+                    throw new IOException("Không xác minh được tài khoản Windows đang đăng nhập.");
+                try
+                {
+                    using var shellIdentity = new WindowsIdentity(token);
+                    if (shellIdentity.User != identity.User)
+                        throw new IOException("MiniApps đang chạy bằng tài khoản khác. Hãy chạy bằng tài khoản Windows cần dọn.");
+                    found = true;
+                }
+                finally { CloseHandle(token); }
+            }
+        }
+        if (!found) throw new IOException("Chưa xác minh được phiên đăng nhập Windows; CLEAN chưa xóa gì.");
+    }
+
+    internal static Task<ExtensionRunResult> RunAsync(IProgress<string> progress) => Task.Run(() =>
+    {
+        Directory.CreateDirectory(ExtensionService.LogDirectory);
+        var path = Path.Combine(ExtensionService.LogDirectory, $"clean-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.log");
+        using var writer = new StreamWriter(path, false, new UTF8Encoding(false)) { AutoFlush = true };
+        var log = new CleanProgress(line => { writer.WriteLine($"[{DateTime.Now:HH:mm:ss}] {line}"); progress.Report(line); });
+        try
+        {
+            CheckInteractiveIdentity();
+            var scope = new CleanScope(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Path.GetTempPath(),
+                [AppContext.BaseDirectory, Environment.GetEnvironmentVariable("MINIAPPS_SESSION") ?? ""]);
+            var result = new CleanEngine(scope, log).Run();
+            log.Report($"{(result.Skipped == 0 ? "Xong" : "Chưa dọn hết")}: {result.DeletedFiles} file · {result.Bytes / 1048576d:0.0} MB · {result.HistoryDatabases} lịch sử Firefox · {result.InUse} file tạm đang được dùng · giữ lại/bỏ qua {result.Skipped} mục.");
+            return new ExtensionRunResult(result.Skipped == 0 ? 0 : 2, path);
+        }
+        catch (Exception ex)
+        {
+            log.Report("CLEAN dừng: " + ex.Message);
+            return new ExtensionRunResult(2, path);
+        }
+    });
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+    [DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(IntPtr handle);
+    private sealed class CleanProgress(Action<string> action) : IProgress<string> { public void Report(string value) => action(value); }
+}
+
+// All destructive operations accept only resolved, bounded paths. Never delete a profile or
+// TEMP root, never follow junctions/symlinks, and never recurse with Directory.Delete(true).
+internal sealed class CleanEngine
+{
+    private readonly CleanScope scope;
+    private readonly IProgress<string> log;
+    private int deleted, skipped, histories, inUse;
+    private long bytes;
+    private readonly HashSet<string> visited = new(StringComparer.OrdinalIgnoreCase);
+    internal CleanEngine(CleanScope scope, IProgress<string> log) { this.scope = scope; this.log = log; }
+    internal static string Full(string path) => Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    internal static bool Under(string path, string root) => Full(path).StartsWith(Full(root) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    internal static void SafePath(string path, string root, bool allowRoot = false)
+    {
+        var full = Full(path);
+        if (!Under(full, root) && !(allowRoot && full.Equals(Full(root), StringComparison.OrdinalIgnoreCase)))
+            throw new IOException("Đường dẫn nằm ngoài phạm vi đã cho phép.");
+        for (var current = full; !string.IsNullOrEmpty(current); current = Path.GetDirectoryName(current))
+        {
+            // GetAttributes, not Exists: broken links must not look like missing files.
+            try
+            {
+                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                    throw new IOException("Giữ nguyên đường dẫn liên kết/junction.");
+            }
+            catch (FileNotFoundException) { }
+            catch (DirectoryNotFoundException) { }
+        }
+    }
+    // Sharing/lock violation: another program has the file open.
+    private static bool InUse(Exception ex) => (ex.HResult & 0xFFFF) is 32 or 33;
+    // Chromium holds <User Data>\lockfile (delete-on-close, no write sharing) for as long as any of its
+    // processes run, background/Startup boost included. Holding it ourselves keeps the browser from
+    // starting while its profile is cleaned. Nothing is force-closed.
+    private static FileStream LockChromium(string root)
+    {
+        var path = Path.Combine(root, "lockfile");
+        SafePath(path, root);
+        try { return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose); }
+        catch (IOException ex) when (InUse(ex))
+        {
+            throw new IOException("Trình duyệt đang mở (kể cả chạy nền); bỏ qua trình duyệt này. Đóng hẳn trình duyệt rồi chạy CLEAN lại.");
+        }
+    }
+    internal CleanResult Run()
+    {
+        // Refuse a redirected/broad TEMP, or a profile from another account, before any deletion.
+        if (string.IsNullOrWhiteSpace(scope.UserRoot) || Full(scope.UserRoot).Length <= 3)
+            throw new IOException("Không xác định được thư mục tài khoản Windows.");
+        foreach (var root in new[] { scope.Local, scope.Roaming, scope.Temp }) SafePath(root, scope.UserRoot);
+        if (!Full(scope.Temp).Equals(Full(Path.Combine(scope.Local, "Temp")), StringComparison.OrdinalIgnoreCase))
+            throw new IOException("%TEMP% đã chuyển khỏi AppData\\Local\\Temp; CLEAN chưa hỗ trợ đường dẫn này và chưa xóa gì.");
+        if (new[] { scope.UserRoot, scope.Local, scope.Roaming }.Any(root => Full(root).Equals(Full(scope.Temp), StringComparison.OrdinalIgnoreCase)) ||
+            Under(scope.Local, scope.Temp) || Under(scope.Roaming, scope.Temp))
+            throw new IOException("%TEMP% quá rộng; CLEAN từ chối dọn để bảo vệ dữ liệu.");
+        log.Report("CLEAN: dọn file tạm của tài khoản hiện tại…");
+        if (Directory.Exists(scope.Temp)) foreach (var child in Children(scope.Temp)) Remove(child, scope.Temp, true);
+        var browsers = new (string Name, string Relative)[]
+        {
+            ("Chrome", @"Google\Chrome\User Data"), ("Chrome Beta", @"Google\Chrome Beta\User Data"),
+            ("Chrome Dev", @"Google\Chrome Dev\User Data"), ("Chrome Canary", @"Google\Chrome SxS\User Data"),
+            ("Edge", @"Microsoft\Edge\User Data"), ("Edge Beta", @"Microsoft\Edge Beta\User Data"),
+            ("Edge Dev", @"Microsoft\Edge Dev\User Data"), ("Edge Canary", @"Microsoft\Edge SxS\User Data"),
+            ("Cốc Cốc", @"CocCoc\Browser\User Data"), ("Brave", @"BraveSoftware\Brave-Browser\User Data"),
+            ("Brave Beta", @"BraveSoftware\Brave-Browser-Beta\User Data"), ("Brave Nightly", @"BraveSoftware\Brave-Browser-Nightly\User Data"),
+            ("Vivaldi", @"Vivaldi\User Data"), ("Chromium", @"Chromium\User Data")
+        };
+        foreach (var browser in browsers) Chromium(browser.Name, Path.Combine(scope.Local, browser.Relative));
+        foreach (var opera in new[] { "Opera Stable", "Opera GX Stable" })
+        {
+            var local = Path.Combine(scope.Local, "Opera Software", opera);
+            Chromium(opera, Path.Combine(scope.Roaming, "Opera Software", opera), local, Path.Combine(local, "Default"));
+        }
+        Firefox();
+        log.Report("  Chỉ xử lý profile chuẩn đã nhận diện; không quét profile portable/vị trí tùy chỉnh của Chromium hoặc dữ liệu đồng bộ trên mạng.");
+        return new(deleted, bytes, skipped, histories, inUse);
+    }
+    private string[] Children(string path)
+    {
+        try { SafePath(path, scope.UserRoot); return Directory.GetFileSystemEntries(path); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Skip(path, ex.Message); return []; }
+    }
+    private void Skip(string path, string reason) { skipped++; log.Report("  Giữ lại " + path + ": " + reason); }
+    private bool Protected(string path, bool temp)
+    {
+        var name = Path.GetFileName(path);
+        if (name.Equals("Backups", StringComparison.OrdinalIgnoreCase) || name.Equals("Backup", StringComparison.OrdinalIgnoreCase) ||
+            name.StartsWith("debloat-", StringComparison.OrdinalIgnoreCase)) return true;
+        if (!temp) return false;
+        if (name.Equals("MiniApps", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".reg", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".bak", StringComparison.OrdinalIgnoreCase)) return true;
+        return scope.ProtectedPaths.Where(p => !string.IsNullOrWhiteSpace(p)).Any(p =>
+            Full(p).Equals(Full(path), StringComparison.OrdinalIgnoreCase) || Under(p, path) || Under(path, p));
+    }
+    private void Remove(string path, string root, bool temp = false)
+    {
+        try
+        {
+            SafePath(path, root);
+            if (Protected(path, temp)) { log.Report("  Bảo toàn: " + path); return; }
+            if (Directory.Exists(path))
+            {
+                foreach (var child in Directory.GetFileSystemEntries(path)) Remove(child, root, temp);
+                SafePath(path, root);
+                // A skipped/locked/protected child keeps its parents too.
+                if (!Directory.EnumerateFileSystemEntries(path).Any()) Directory.Delete(path, false);
+            }
+            else if (File.Exists(path))
+            {
+                var size = new FileInfo(path).Length;
+                // Test ownership/locks before deleting. Never force-close a process or clear attributes.
+                using (new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) { }
+                SafePath(path, root);
+                File.Delete(path); deleted++; bytes += size;
+            }
+        }
+        catch (IOException ex) when (temp && InUse(ex)) { inUse++; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Skip(path, ex.Message); }
+    }
+    private void CacheFolders(string profile)
+    {
+        if (!Directory.Exists(profile)) return;
+        foreach (var cache in new[] { "Cache", "Code Cache", "GPUCache", "DawnCache", "DawnGraphiteCache", "DawnWebGPUCache", "GrShaderCache", "ShaderCache", @"Service Worker\CacheStorage", @"Service Worker\ScriptCache" })
+            Remove(Path.Combine(profile, cache), scope.UserRoot);
+    }
+    private void Chromium(string name, string root, params string[] localCaches)
+    {
+        if (!Directory.Exists(root)) return;
+        try
+        {
+            SafePath(root, scope.UserRoot);
+            log.Report("CLEAN: " + name + "…");
+            using var browserLock = LockChromium(root);
+            var profiles = new List<string>();
+            if (File.Exists(Path.Combine(root, "Preferences"))) profiles.Add(root); // Opera pre-102.
+            foreach (var child in Children(root))
+            {
+                SafePath(child, root);
+                if (Directory.Exists(child) && File.Exists(Path.Combine(child, "Preferences"))) profiles.Add(child);
+            }
+            if (profiles.Count == 0) Skip(root, "Không nhận diện được profile; không xóa phỏng đoán.");
+            foreach (var profile in profiles)
+            {
+                // Favicons maps visited URLs to icons; bookmark icons are fetched again on the next visit.
+                foreach (var database in new[] { "History", "Archived History", "Visited Links", "Top Sites", "Shortcuts", "Network Action Predictor", "Favicons" })
+                    RemoveHistoryFamily(Path.Combine(profile, database), root);
+                CacheFolders(profile);
+            }
+            CacheFolders(root);
+            foreach (var cache in localCaches) CacheFolders(cache);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Skip(root, ex.Message); }
+    }
+    private void RemoveHistoryFamily(string database, string root)
+    {
+        // Never delete WAL/journal while its main database is still locked or could not be deleted.
+        var files = new[] { database, database + "-journal", database + "-wal", database + "-shm" };
+        var handles = new List<FileStream>();
+        try
+        {
+            foreach (var path in files)
+            {
+                SafePath(path, root);
+                if (File.Exists(path)) handles.Add(new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None));
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Skip(database, ex.Message); return; }
+        finally { foreach (var handle in handles) handle.Dispose(); }
+        Remove(database, root);
+        if (File.Exists(database)) return;
+        foreach (var path in files.Skip(1)) Remove(path, root);
+    }
+    private void Firefox()
+    {
+        var root = Path.Combine(scope.Roaming, "Mozilla", "Firefox");
+        if (!Directory.Exists(root)) return;
+        var profiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            SafePath(root, scope.UserRoot);
+            var standard = Path.Combine(root, "Profiles");
+            if (Directory.Exists(standard)) foreach (var path in Children(standard)) if (Directory.Exists(path)) profiles.Add(Full(path));
+            var ini = Path.Combine(root, "profiles.ini");
+            SafePath(ini, root);
+            if (File.Exists(ini))
+            {
+                // Path entries are explicit registrations, not a scan of arbitrary user directories.
+                foreach (var line in File.ReadAllLines(ini).Select(line => line.Trim()).Where(line => line.StartsWith("Path=", StringComparison.OrdinalIgnoreCase)))
+                {
+                    var path = line.Substring(5).Replace('/', Path.DirectorySeparatorChar);
+                    profiles.Add(Full(Path.IsPathRooted(path) ? path : Path.Combine(root, path)));
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { Skip(root, ex.Message); }
+        foreach (var profile in profiles)
+        {
+            if (!visited.Add(profile)) continue;
+            try
+            {
+                SafePath(profile, scope.UserRoot);
+                log.Report("CLEAN: Firefox…");
+                var dbPath = Path.Combine(profile, "places.sqlite");
+                SafePath(dbPath, profile);
+                foreach (var suffix in new[] { "-wal", "-shm", "-journal" }) SafePath(dbPath + suffix, profile);
+                var lockPath = Path.Combine(profile, "parent.lock");
+                SafePath(lockPath, profile);
+                // Firefox holds parent.lock unshared while running; holding it here keeps Firefox from
+                // opening this profile until the cleanup is done. Deleted on close, as Firefox does.
+                FileStream profileLock;
+                try { profileLock = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose); }
+                catch (IOException ex) when (InUse(ex)) { throw new IOException("Firefox đang mở; bỏ qua profile này. Đóng hẳn Firefox rồi chạy CLEAN lại."); }
+                using (profileLock)
+                {
+                    if (File.Exists(dbPath))
+                    {
+                        FirefoxHistory.Clear(dbPath);
+                        histories++;
+                    }
+                    // favicons.sqlite maps visited URLs to icons; Firefox recreates it, bookmark icons return on the next visit.
+                    RemoveHistoryFamily(Path.Combine(profile, "favicons.sqlite"), profile);
+                    foreach (var cache in new[] { "cache2", "startupCache", "thumbnails" }) Remove(Path.Combine(profile, cache), profile);
+                }
+                if (Under(profile, root))
+                {
+                    var relative = Full(profile).Substring(Full(root).Length + 1);
+                    var localProfile = Path.Combine(scope.Local, "Mozilla", "Firefox", relative);
+                    foreach (var cache in new[] { "cache2", "startupCache", "thumbnails" }) Remove(Path.Combine(localProfile, cache), scope.Local);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or DllNotFoundException or EntryPointNotFoundException) { Skip(profile, ex.Message); }
+        }
+    }
+}

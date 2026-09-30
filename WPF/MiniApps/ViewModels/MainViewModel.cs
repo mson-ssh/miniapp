@@ -136,7 +136,18 @@ public sealed class MainViewModel : Observable
             "Tải khoảng 2 GB, có thể mất 10–30 phút. Phần đã có trên máy sẽ được bỏ qua."),
         new("sharelan", "Share LAN",
             "Chia sẻ ổ đĩa/thư mục qua mạng LAN không cần mật khẩu, kết nối tới máy đang chia sẻ, quản lý hoặc chẩn đoán. Mở trong cửa sổ PowerShell riêng.",
-            "Mở", "", interactive: true)
+            "Mở", "", interactive: true),
+        new("clean", "CLEAN",
+            "Dọn file tạm, lịch sử và cache trình duyệt của tài khoản Windows hiện tại.",
+            "Dọn dẹp",
+            "Chạy CLEAN cho tài khoản " + Environment.UserName + "?\n\n" +
+            "• Xóa file trong %TEMP% và lịch sử/cache của các profile trình duyệt được hỗ trợ.\n" +
+            "• Giữ cookie/đăng nhập, mật khẩu, dấu trang và file đã tải.\n" +
+            "• Hãy đóng trình duyệt trước. Trình duyệt còn mở (kể cả chạy nền như Startup boost của Edge) sẽ được bỏ qua, không bị ép tắt.\n" +
+            "• Không chạy khi phần mềm khác đang cài đặt.\n" +
+            "• File đang dùng, liên kết thư mục và thư mục backup được giữ lại.\n\n" +
+            "Dữ liệu đã xóa không vào Thùng rác. Chỉ dọn dữ liệu cục bộ; đồng bộ có thể đưa lịch sử trở lại.\n" +
+            "Hỗ trợ profile chuẩn Chrome, Edge, Cốc Cốc, Brave, Opera, Vivaldi, Chromium và Firefox; không tự quét profile portable/vị trí tùy chỉnh ngoài tài khoản này."),
     ];
     public RelayCommand<ExtensionItem> RunExtensionCommand { get; }
     public RelayCommand<ExtensionItem> OpenExtensionLogCommand { get; }
@@ -151,14 +162,41 @@ public sealed class MainViewModel : Observable
     public bool IsBusy { get => busy; private set { if (Set(ref busy, value)) { Raise(nameof(IsIdle)); Raise(nameof(ShowInstallCancel)); Raise(nameof(CanChooseSuite)); Refresh(); } } }
     public bool IsIdle => !IsBusy;
     private bool installRunning;
-    public bool IsInstallRunning { get => installRunning; private set { if (Set(ref installRunning, value)) Raise(nameof(ShowInstallCancel)); } }
-    public bool ShowInstallCancel => IsBusy && IsInstallRunning;
+    public bool IsInstallRunning { get => installRunning; private set { if (Set(ref installRunning, value)) { Raise(nameof(ShowInstallCancel)); Raise(nameof(InstallButtonText)); Raise(nameof(IsCancelButton)); InstallCommand?.Refresh(); } } }
+    public bool IsCancelButton => IsInstallRunning;
+    private bool cancellingInstall;
+    public bool IsCancellingInstall { get => cancellingInstall; private set { if (Set(ref cancellingInstall, value)) { Raise(nameof(InstallButtonText)); InstallCommand?.Refresh(); CancelCommand?.Refresh(); } } }
+    public bool ShowInstallCancel => false;
+    private const string CancelledSummary = "Đã hủy · đã dừng nhóm tiến trình của lượt cài. Thay đổi đã áp dụng không được hoàn tác; dịch vụ Windows có thể còn xử lý.";
+    private void CancelInstall()
+    {
+        var source = cancellation;
+        if (source == null || IsCancellingInstall || !IsInstallRunning) return;
+        if (!confirm("HỦY các tác vụ đang chạy?\n\nSẽ dừng cưỡng bức cây tiến trình của lượt cài, kể cả bộ cài và Windows Setting.\nPhần mềm có thể cài dở; thay đổi Windows/ổ đĩa đã áp dụng không được hoàn tác. Dịch vụ hệ thống xử lý thay có thể vẫn tiếp tục.\n\nTiếp tục hủy?")) return;
+        // A modal confirmation pumps the dispatcher: the run may finish while it is open.
+        if (cancellation != source || !IsInstallRunning) return;
+        IsCancellingInstall = true;
+        Summary = "Đang hủy · dừng cây tiến trình của lượt cài… Nếu bị treo, có thể đóng cửa sổ để thoát.";
+        // Cancel callbacks terminate jobs and close download streams; keep them off the UI thread.
+        // The run may still finish and dispose the source first.
+        _ = Task.Run(() => { try { source.Cancel(); } catch (ObjectDisposedException) { } });
+    }
+    // Escape hatch requested by the user: a process that ignores termination must not trap MiniApps.
+    // Offered only after HỦY was confirmed. Windows releases the install mutex when MiniApps exits;
+    // the work folder is removed by WorkFolderCleaner on the next start.
+    public bool ConfirmExitWhileCancelling() => IsCancellingInstall && confirm(
+        "MiniApps vẫn đang chờ tiến trình của lượt cài dừng hẳn.\n\n" +
+        "Thoát MiniApps ngay?\n" +
+        "• Tiến trình chưa dừng được có thể vẫn chạy nền; kiểm tra trong Task Manager nếu cần.\n" +
+        "• Thư mục tạm của lượt cài sẽ được dọn ở lần mở MiniApps sau.");
     private bool hasStarted;
     public bool HasStarted { get => hasStarted; private set { Set(ref hasStarted, value); Raise(nameof(IsReady)); Raise(nameof(CanChooseSuite)); } }
     public bool IsReady => !HasStarted;
     private bool installFinished;
     public bool InstallFinished { get => installFinished; private set { if (Set(ref installFinished, value)) { Raise(nameof(InstallButtonText)); InstallCommand?.Refresh(); } } }
-    public string InstallButtonText => InstallFinished ? "Đã hoàn tất" : "Cài đặt";
+    public string InstallButtonText =>
+        IsInstallRunning ? (IsCancellingInstall ? "ĐANG HỦY…" : "HỦY") :
+        InstallFinished ? "Đã hoàn tất" : "Cài đặt";
     private bool isWindowsDetailsVisible;
     public bool IsWindowsDetailsVisible { get => isWindowsDetailsVisible; private set => Set(ref isWindowsDetailsVisible, value); }
     private string summary = "Sẵn sàng cài toàn bộ danh sách đã cấu hình.";
@@ -202,8 +240,9 @@ public sealed class MainViewModel : Observable
             try { windowsCatalog = store.LoadWindows(requireSettings); }
             catch (Exception) when (!requireSettings) { }
         }
-        InstallCommand = new RelayCommand(async () => await InstallAsync(), () => !IsBusy && !InstallFinished && (Apps.Count > 0 || WindowsOptions.Count > 0));
-        CancelCommand = new RelayCommand(() => { cancellation?.Cancel(); Summary = "Đang hủy hàng đợi · chờ bộ cài đang chạy kết thúc…"; }, () => IsInstallRunning && cancellation != null);
+        InstallCommand = new RelayCommand(async () => { if (IsInstallRunning) CancelInstall(); else await InstallAsync(); },
+            () => IsInstallRunning ? !IsCancellingInstall && cancellation != null : !IsBusy && !InstallFinished && (Apps.Count > 0 || WindowsOptions.Count > 0));
+        CancelCommand = new RelayCommand(CancelInstall, () => IsInstallRunning && cancellation != null && !IsCancellingInstall);
         InstallOneCommand = new RelayCommand<AppRow>(async row => await InstallOneAsync(row), _ => !IsBusy);
         // An interactive tool runs in its own window, so it stays available while an install runs.
         RunExtensionCommand = new RelayCommand<ExtensionItem>(async item => await RunExtensionAsync(item), item => item.Interactive || !IsBusy);
@@ -284,7 +323,7 @@ public sealed class MainViewModel : Observable
                     events.Report(new(app.Id, "Đang tải · mô phỏng", 45));
                     await Task.Delay(180, token);
                     events.Report(new(app.Id, "Đang cài · mô phỏng", 100));
-                    await Task.Delay(700);
+                    await Task.Delay(700, token);
                     events.Report(new(app.Id, "Hoàn tất · mô phỏng", 100, true));
                 });
                 var previewSettings = options.Select(async option =>
@@ -308,6 +347,8 @@ public sealed class MainViewModel : Observable
         }
         finally
         {
+            // Cancellation also needs queued progress drained before the final summary/reset.
+            await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Background);
             try { if (Directory.Exists(workDir)) Directory.Delete(workDir, true); }
             catch (Exception ex) { Log("Chưa dọn hết bộ cài tạm: " + ex.Message); }
             RemoveSessionMarker(marker);
@@ -353,6 +394,7 @@ public sealed class MainViewModel : Observable
         }
         foreach (var row in Apps) { row.Status = "Chờ tải"; row.Progress = 0; }
         cancellation = new CancellationTokenSource();
+        IsCancellingInstall = false; InstallCommand.Refresh(); CancelCommand.Refresh();
         var total = selected.Count + options.Count;
         var finished = new HashSet<string>(); var failed = new HashSet<string>();
         var smartSkipped = new HashSet<string>(); var unverified = new HashSet<string>();
@@ -382,21 +424,36 @@ public sealed class MainViewModel : Observable
                 Log($"{(isWindows ? windowsNames[e.Id] : row?.Name ?? e.Id)}: {e.Status}");
             }
             Overall = total == 0 ? 0 : finished.Count * 100d / total;
-            Summary = $"Đã xử lý {finished.Count}/{total} · {failed.Count} lỗi";
+            if (!IsCancellingInstall)
+                Summary = $"Đã xử lý {finished.Count}/{total} · {failed.Count} lỗi";
         });
         var runCompleted = false;
         try
         {
             Summary = preview ? "Đang mô phỏng · không tải hoặc chạy bộ cài" : "Đang chuẩn bị cài đặt…";
             await RunDeploymentAsync(selected, options, events, cancellation.Token);
-            Summary = cancellation.IsCancellationRequested ? "Đã dừng · bộ cài đang chạy đã kết thúc an toàn."
+            Summary = cancellation.IsCancellationRequested ?
+                CancelledSummary
                 : $"Hoàn tất · {finished.Count}/{total} tác vụ · bỏ qua {smartSkipped.Count} đã cài · chưa xác minh {unverified.Count} · {failed.Count} lỗi";
             runCompleted = !cancellation.IsCancellationRequested && failed.Count == 0;
         }
-        catch (OperationCanceledException) { Summary = "Đã hủy lượt chạy."; }
+        catch (OperationCanceledException) {
+            Summary = CancelledSummary;
+        }
         catch (Exception ex) { Log(ex.ToString()); Summary = "Có lỗi trong quá trình cài đặt."; }
         finally
         {
+            if (cancellation.IsCancellationRequested)
+            {
+                foreach (var row in ProgressRows.Where(row => !row.IsWindowsSummary && !finished.Contains(row.Definition.Id))) row.Status = "Đã hủy";
+                foreach (var row in WindowsTaskDetails.Where(row => !finished.Contains(row.Definition.Id)))
+                {
+                    row.Status = "Đã hủy";
+                    var summaryRow = SystemTasks.FirstOrDefault();
+                    if (summaryRow != null) { summaryRow.Status = windowsProgress.Update(row.Definition.Id, "Đã hủy", true, false); summaryRow.Progress = windowsProgress.Progress; }
+                }
+            }
+            IsCancellingInstall = false;
             cancellation.Dispose(); cancellation = null; InstallFinished = runCompleted; IsInstallRunning = false; IsBusy = false;
             deploymentLock.ReleaseMutex();
         }
@@ -411,6 +468,7 @@ public sealed class MainViewModel : Observable
         IsBusy = true; IsInstallRunning = true;
         row.Status = setting == null ? "Chờ tải" : "Chờ chạy"; row.Progress = 0;
         cancellation = new CancellationTokenSource();
+        IsCancellingInstall = false; InstallCommand.Refresh(); CancelCommand.Refresh();
         var events = new Progress<DeploymentEvent>(e =>
         {
             if (e.Id != row.Definition.Id) return;
@@ -421,12 +479,16 @@ public sealed class MainViewModel : Observable
         {
             Summary = preview ? $"Đang mô phỏng {row.Name}…" : setting == null ? $"Đang cài {row.Name}…" : $"Đang chạy {row.Name}…";
             await RunDeploymentAsync(setting == null ? [row.Definition] : [], setting == null ? [] : [setting], events, cancellation.Token);
-            Summary = cancellation.IsCancellationRequested ? "Đã dừng · bộ cài đang chạy đã kết thúc an toàn." : $"{row.Name}: {row.Status}";
+            Summary = cancellation.IsCancellationRequested ?
+                CancelledSummary
+                : $"{row.Name}: {row.Status}";
         }
         catch (OperationCanceledException) { row.Status = "Đã hủy"; Summary = "Đã hủy lượt chạy."; }
         catch (Exception ex) { Log(ex.ToString()); row.Status = "Thất bại"; Summary = $"Có lỗi khi cài {row.Name}."; }
         finally
         {
+            if (cancellation.IsCancellationRequested) { row.Status = "Đã hủy"; Summary = CancelledSummary; }
+            IsCancellingInstall = false;
             cancellation.Dispose(); cancellation = null; IsInstallRunning = false; IsBusy = false;
             deploymentLock.ReleaseMutex();
         }
@@ -451,7 +513,9 @@ public sealed class MainViewModel : Observable
             marker = CreateSessionMarker();
             var result = preview ? await SimulateExtensionAsync(progress) : await Task.Run(() => runExtension(item.Id, progress));
             item.LogPath = result.LogPath;
-            item.Status = result.ExitCode == 0 ? "Hoàn tất" : $"Thất bại · mã {result.ExitCode}";
+            item.Status = result.ExitCode == 0 ? "Hoàn tất" :
+                item.Id == "clean" && result.ExitCode == 2 ? "Chưa dọn hết · xem nhật ký" :
+                $"Thất bại · mã {result.ExitCode}";
         }
         catch (Exception ex) { item.Status = "Thất bại"; item.Detail = ex.Message; }
         finally

@@ -1,5 +1,51 @@
 # Trạng thái bàn giao
 
+## Đồng bộ net10 theo net48 — 2026-09-30, local
+
+Theo yêu cầu người dùng lấy net48 làm chuẩn: gỡ toàn bộ `#if NET48` trong source và test, cả hai target dùng cùng code: HỦY đỏ với Job riêng từng tác vụ và lối thoát khi treo, CLEAN, Information tối thiểu (Read-Information.ps1 nhúng cho cả hai; net10 không còn nhúng tool/Info/info.ps1), cửa sổ giữ chung kích thước (bỏ FitInformationHeight/ContentOverflow), thẻ Install gọn. Khác biệt còn lại chỉ ở csproj (gói/tham chiếu riêng net48) và IsExternalInit. Fixture test HỦY lấy đường dẫn exe của tiến trình thay cho Assembly.Location (net10 là .dll).
+
+Kiểm tra: build net48 và net10 đều 0 warning/0 error; mỗi target 86 logic + 16 WPF PASS, mã 0; `--information-audit` thật đạt trên cả hai (khoảng 0,5–0,9 s, không in định danh). Output artifacts/review-net48-synced-20260930-084802 và artifacts/review-net10.0-windows-synced-20260930-084802 (self-contained win-x64 như Publish.ps1) kèm ReleaseConfig; validate và preview startup smoke thoát 0. Không chạy cài đặt/CLEAN thật; chưa commit/push/phát hành. Lần push trước (2026-09-28) bị chặn quyền, chưa lên GitHub.
+
+## Thoát khi HỦY bị treo — 2026-09-28, local, net48
+
+Theo yêu cầu người dùng (không muốn bị kẹt khi một tiến trình treo/lỗi): khi đã xác nhận HỦY và đang ở ĐANG HỦY…, đóng cửa sổ hỏi "Thoát MiniApps ngay?" (mặc định Không). Đồng ý thì thoát; Windows nhả khóa cài đặt khi app thoát, thư mục tạm dọn ở lần mở sau, tiến trình không dừng được có thể còn chạy nền. Summary lúc hủy nhắc có thể đóng cửa sổ nếu treo. Đang cài chưa HỦY vẫn phải bấm HỦY trước; EXTEND giữ nguyên (chưa có lối thoát). Kiểm tra: build net48 0 warning/0 error; 86 logic + 16 WPF PASS (test WPF: chưa hủy thì không hỏi, đang hủy thì Không giữ cửa sổ, Có cho thoát). Chưa tái hiện được tiến trình treo thật để thử thoát hẳn; preview hủy xong ngay. Output artifacts/review-net48-cancel-exit-20260928-181927 kèm ReleaseConfig; validate và smoke thoát 0. Chưa commit/push/phát hành.
+
+## Sửa sau rà soát HỦY/CLEAN — 2026-09-28, local, net48
+
+HỦY: mỗi tác vụ một Windows Job; tác vụ đã xong được thả khỏi nhóm nên HỦY chỉ dừng cây tiến trình của tác vụ còn chạy, app nền do tác vụ đã xong để lại không bị tắt. Cancel chạy ngoài luồng giao diện. Win11Debloat chỉ Stop-Process Explorer, Windows tự mở lại ngoài Job nên HỦY không tắt Explorer. CLEAN: bỏ chặn theo tên tiến trình; kiểm từng trình duyệt bằng lockfile/parent.lock, trình duyệt đang mở (kể cả Edge Startup boost) chỉ bị bỏ qua riêng. File TEMP đang dùng đếm riêng, không làm kết quả "Chưa dọn hết". Xóa thêm Favicons/favicons.sqlite và bảng phụ lịch sử Firefox; lỗi checkpoint sau COMMIT không còn báo sai. Sửa tài liệu/comment cũ về Information.
+
+Kiểm tra: build net48 0 warning/0 error; 86 logic tests và 16 PASS WPF/render, mã 0 (test mới: HỦY không tắt app của tác vụ đã xong; CLEAN bỏ qua riêng trình duyệt giữ lockfile). Trên máy phát triển xác nhận Chrome đang chạy giữ lockfile độc quyền (chỉ đọc, không dọn); Edge không chạy nên chưa kiểm Startup boost thật. Output artifacts/review-net48-cancel-clean-fixes-20260928-180923 kèm ReleaseConfig; validate và preview startup smoke thoát 0. Không chạy cài đặt/CLEAN thật; không build net10; chưa commit/push/phát hành.
+
+## Cài đặt → HỦY đỏ, dừng cây tiến trình — 2026-09-28, local, net48
+
+Nút chính đổi thành HỦY đỏ khi cài chung/cài riêng; bỏ nút Dừng hàng đợi riêng trên net48. Xác nhận rồi dừng tải/hàng đợi và Windows Job của lượt cài, gồm shell, installer, Windows Setting và con cháu còn sống kể cả cha đã thoát. Khi đang hủy nút khóa/hiện ĐANG HỦY…, chờ nhóm tiến trình hết rồi nhả khóa, cập nhật Đã hủy và cho thử lại. Không kill tiến trình không liên quan, không tự timeout/kill, không rollback. Việc giao cho dịch vụ Windows dùng chung ngoài Job có thể tiếp tục; cảnh báo này có trong xác nhận/tổng kết. EXTEND và hành vi net10 giữ nguyên; không build/test net10.
+
+Kiểm tra: build net48 0 warning/0 error; 84 logic tests và 16 PASS WPF/render. Fixture chạy PowerShell và tiến trình test vô hại, xác minh cây con mồ côi, nhiều shell, giữ tiến trình ngoài lượt, không launch sau hủy, giữ app nền khi hoàn tất, UTF-8/mã lỗi và service chạy script giả. Kiểm tra UI HỦY đỏ, từ chối/đồng ý, khóa trong lúc hủy, trạng thái và thử lại; đã xem ảnh render. Output riêng artifacts/review-net48-force-cancel-20260928-174412 kèm ReleaseConfig; validate với config-root tường minh và preview startup smoke thoát 0. Không chạy bộ cài/thiết lập Windows thật; người dùng tự test, nên chưa mở Public bình thường. Chưa kiểm tra MSI/EXE thực hoặc thao tác dịch vụ/ổ đĩa trên VM; chưa commit/push/phát hành.
+
+## EXTEND CLEAN — 2026-09-28, local, net48
+
+Thêm thẻ CLEAN/Dọn dẹp cho tài khoản Windows hiện tại theo xác nhận người dùng: dọn TEMP chuẩn và lịch sử/cache của profile Chrome/Edge/Cốc Cốc/Brave/Opera/Vivaldi/Chromium/Firefox được nhận diện. Giữ cookie/đăng nhập, mật khẩu, dấu trang, dữ liệu website và file tải xuống; không xóa toàn bộ profile. Firefox dùng SQLite transaction thay vì xóa places.sqlite. Có xác nhận, khóa chung Install, chặn browser đang mở, kiểm tra SID phiên, từ chối path/link/hard link không an toàn, giữ backup và file đang dùng. Chi tiết/giới hạn tại CLEAN.md. net10 không thêm CLEAN và không build/test.
+
+Kiểm tra: build net48 0 warning/0 error; 78 logic tests (11 fixture CLEAN mới) và 15 PASS WPF/render, gồm CLEAN xác nhận/khóa/preview. Fixture SQLite thật chỉ chứa dữ liệu giả; kiểm tra rollback, bookmarks, tài khoản khác, junction/hard link, DB hỏng và file khóa đều đạt. Đã xem ảnh render EXTEND có ba thẻ. Output artifacts/review-net48-clean-20260928-171017 kèm ReleaseConfig; validate và preview startup smoke thoát 0. Không mở Public chạy thật để người dùng tự test; không dọn TEMP/profile thật. Chưa xác minh trên profile browser thật hoặc luồng UAC tài khoản khác; chưa commit/push/phát hành.
+
+## Information giữ kích thước chung — 2026-09-28, local, net48
+
+Theo yêu cầu mới, bỏ tự thu chiều rộng/chiều cao cửa sổ khi vào Information hoặc Làm mới; giữ kích thước hiện tại của cửa sổ như Install Software và EXTEND, kể cả kích thước người dùng tự chỉnh. net10 giữ hành vi cũ. Build net48 sạch 0 warning/0 error; 67 logic tests và 14 PASS WPF/render, gồm chuyển qua cả ba trang và refresh không đổi kích thước. Output riêng artifacts/review-net48-shared-window-20260928-165220 kèm ReleaseConfig. Không mở Public theo yêu cầu người dùng tự test; chưa test hệ thống thật, không build net10, chưa commit/push/phát hành.
+
+## Information đọc tối thiểu và Install bớt mô tả — 2026-09-28, local, net48
+
+net48 nhúng Scripts/Read-Information.ps1 thay cho tool/Info/info.ps1: chỉ bốn truy vấn CIM giới hạn thuộc tính (Windows Caption, BIOS SerialNumber, ComputerSystem Manufacturer và trạng thái bản quyền Windows), HOST lấy trực tiếp từ Environment. Không quét CPU/RAM/GPU/ổ đĩa/màn hình, không Add-Type/native helper, không chạy slmgr. Truy vấn lỗi trả dữ liệu thiếu hoặc bản quyền chưa xác nhận. Script standalone và resource net10 giữ nguyên. Cửa sổ Information rộng 780 (tối thiểu 720), cao tự co tối thiểu 480; trở lại trang khác khôi phục kích thước trước đó. Install ẩn slogan và các đoạn hướng dẫn dài, chỉ giữ cảnh báo ngắn rằng WPS/OnlyOffice/LibreOffice sẽ gỡ Microsoft Office.
+
+Output artifacts/review-net48-light-info-20260928-164612 kèm bản sao ReleaseConfig: validate và preview startup smoke thoát 0; đã mở Public thật, cửa sổ phản hồi, không bấm thực thi tác vụ.
+
+Kiểm tra: build net48 sạch; 67 logic tests và 14 PASS WPF/render; Test-InformationCollector.ps1 đạt hai fixture (chỉ bốn truy vấn, provider lỗi). Audit bộ đọc nhúng trên máy phát triển: 941 ms, không in dữ liệu định danh. Đã xem render Install và Information 780 px. Không build/test net10; không chạy cài đặt/thiết lập Windows thật; chưa commit/push/phát hành.
+
+## Thu gọn Install Software và Information — 2026-09-28, local, net48
+
+Thẻ phần mềm ở Sẵn sàng và Tiến trình giảm padding/khoảng cách, nút cài riêng 28 px, chiều cao tối thiểu nội dung tiến trình 48 px; giữ cỡ chữ và bố cục ba cột. Information chỉ hiển thị HOST, Serial, Driver, phiên bản hệ điều hành và bản quyền (vẫn có Làm mới/thời điểm đọc); bỏ model/hãng và các mục CPU/RAM/GPU/ổ đĩa/màn hình khỏi giao diện. Bộ đọc và dữ liệu hãng phục vụ Driver giữ nguyên, không sửa info.ps1. Các khác biệt được giới hạn NET48; net10 giữ giá trị bố cục cũ, không build/test net10.
+
+Kiểm tra: build net48 0 warning/0 error; 66 logic tests và toàn bộ kiểm tra WPF đạt (80 PASS tổng cộng), đã xem ảnh render Install sẵn sàng/tiến trình và Information. Test chiều cao chấp nhận giới hạn MinHeight và so với chiều cao thực trước khi chuyển trang thay vì hằng số 810. Output riêng: artifacts/review-net48-20260928-compact-info, có bản sao ReleaseConfig; validate cấu hình và preview startup smoke thoát 0. Không chạy cài đặt/thiết lập Windows thật; chưa commit/push/phát hành.
+
 ## Information 2 cột — 2026-09-21, local
 
 Người dùng thấy trang dài mà thừa chiều ngang: các mục chuyển sang 2 cột cân nhau (trái: Hệ điều hành, Vi xử lý, Bộ nhớ; phải: Đồ họa, Lưu trữ, Màn hình), tên mục đặt trên nội dung, cột nhãn co theo nhãn dài nhất của từng mục. Trang ngắn khoảng một nửa, cửa sổ tự co theo. Dữ liệu không đổi. Sau đó: loại card đồ họa hiển thị iGPU (tích hợp) / GPU (rời), đổi ở `InformationService` vì `info.ps1` là nguồn của info.exe nên giữ nguyên; chữ to thêm một bậc (giá trị 15, nhãn và dòng phụ 14, tên mục 15, tên máy 24). Test mới kiểm tra hai cột cạnh nhau, rộng bằng nhau, chiều cao chênh không quá 1,6 lần. net48 và net10 đều 80 PASS. Chưa push/phát hành.

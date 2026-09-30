@@ -1,4 +1,4 @@
-<Window x:Class="MiniApps.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+<Window x:Class="MiniApps.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:MiniApps"
         Title="MiniApps" Width="1120" Height="810" MinWidth="940" MinHeight="660" WindowStartupLocation="CenterScreen"
         Background="#F3F4F6" Foreground="{StaticResource Ink}" FontFamily="Segoe UI" FontSize="13" UseLayoutRounding="True" Closing="OnClosing">
   <Grid Background="#F3F4F6">
@@ -32,26 +32,26 @@
     <Grid x:Name="PageHost" Grid.Column="1" Margin="32,28,32,22">
       <Grid Visibility="{Binding IsInstall, Converter={StaticResource BoolVisibility}}">
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-        <StackPanel Margin="0,0,0,22"><TextBlock Text="Install Software" FontSize="28" FontWeight="SemiBold" /><TextBlock Text="Ứng dụng cần thiết, Windows theo cách của bạn." Foreground="{StaticResource Muted}" Margin="0,7,0,0" /><TextBlock Text="{Binding Machine}" Style="{StaticResource Caption}" Margin="0,13,0,0" /></StackPanel>
+        <StackPanel Margin="0,0,0,22"><TextBlock Text="Install Software" FontSize="28" FontWeight="SemiBold" /><TextBlock Visibility="{x:Static local:InstallLayout.DescriptionVisibility}" Text="Ứng dụng cần thiết, Windows theo cách của bạn." Foreground="{StaticResource Muted}" Margin="0,7,0,0" /><TextBlock Text="{Binding Machine}" Style="{StaticResource Caption}" Margin="0,13,0,0" /></StackPanel>
         <ScrollViewer x:Name="InstallScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,6,0">
           <StackPanel>
             <Border Style="{StaticResource Panel}" Visibility="{Binding IsReady, Converter={StaticResource BoolVisibility}}">
               <StackPanel>
                 <TextBlock Text="Sẵn sàng cài đặt" FontSize="21" FontWeight="SemiBold" />
-                <TextBlock Text="Một lần bấm để cài toàn bộ ứng dụng đã cấu hình. Tiến trình từng ứng dụng sẽ xuất hiện khi bắt đầu." Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,10,0,28" />
-                <TextBlock Text="{Binding SingleInstallHint}" Style="{StaticResource Caption}" TextWrapping="Wrap" />
+                <TextBlock Visibility="{x:Static local:InstallLayout.DescriptionVisibility}" Text="Một lần bấm để cài toàn bộ ứng dụng đã cấu hình. Tiến trình từng ứng dụng sẽ xuất hiện khi bắt đầu." Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,10,0,28" />
+                <TextBlock x:Name="InstallHint" Text="{Binding SingleInstallHint}" Style="{StaticResource Caption}" TextWrapping="Wrap" />
                 <ItemsControl ItemsSource="{Binding ReadyApps}" x:Name="ReadyList" Margin="0,18,0,0">
                   <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                   <ItemsControl.ItemTemplate><DataTemplate>
-                    <Border Background="#FFFFFF" BorderBrush="#E1E5EA" BorderThickness="1" CornerRadius="5" Padding="12,10" Margin="0,0,8,8">
+                    <Border Background="#FFFFFF" BorderBrush="#E1E5EA" BorderThickness="1" CornerRadius="5" Padding="{x:Static local:InstallLayout.ReadyPadding}" Margin="0,0,8,8">
                       <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                         <StackPanel Margin="0,0,10,0" VerticalAlignment="Center">
                           <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
-                          <TextBlock Text="{Binding Status}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Status}" Margin="0,4,0,6" />
+                          <TextBlock Text="{Binding Status}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Status}" Margin="{x:Static local:InstallLayout.StatusMargin}" />
                           <ProgressBar Value="{Binding Progress, Mode=OneWay}" IsIndeterminate="{Binding IsInstalling}" Height="3" BorderThickness="0" Background="#E8EBF0" Foreground="{StaticResource Accent}" />
                         </StackPanel>
                         <Button Grid.Column="1" Command="{Binding DataContext.InstallOneCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"
-                                Width="34" Height="34" Padding="0" VerticalAlignment="Center" ToolTip="Cài riêng ứng dụng này" AutomationProperties.Name="{Binding Name, StringFormat=Cài riêng {0}}">
+                                Width="{x:Static local:InstallLayout.InstallButtonSize}" Height="{x:Static local:InstallLayout.InstallButtonSize}" Padding="0" VerticalAlignment="Center" ToolTip="Cài riêng ứng dụng này" AutomationProperties.Name="{Binding Name, StringFormat=Cài riêng {0}}">
                           <Path Data="{Binding DataContext.SingleInstallIcon, RelativeSource={RelativeSource AncestorType=Window}}"
                                 Fill="{Binding DataContext.SingleInstallIconColor, RelativeSource={RelativeSource AncestorType=Window}}"
                                 Height="{Binding DataContext.SingleInstallIconSize, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -69,12 +69,12 @@
                 <ItemsControl ItemsSource="{Binding ProgressRows}" x:Name="ProgressList">
                   <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                   <ItemsControl.ItemTemplate><DataTemplate>
-                    <Border BorderBrush="#E1E5EA" BorderThickness="1" CornerRadius="5" Padding="12" Margin="0,0,8,8" MouseLeftButtonUp="OnProgressCardClick">
+                    <Border BorderBrush="#E1E5EA" BorderThickness="1" CornerRadius="5" Padding="{x:Static local:InstallLayout.ProgressPadding}" Margin="0,0,8,8" MouseLeftButtonUp="OnProgressCardClick">
                       <Border.Style><Style TargetType="Border"><Setter Property="Background" Value="#FFFFFF" /><Style.Triggers><DataTrigger Binding="{Binding IsWindowsSummary}" Value="True"><Setter Property="Cursor" Value="Hand" /><Setter Property="Background" Value="#F7FAFE" /></DataTrigger></Style.Triggers></Style></Border.Style>
-                      <Grid MinHeight="67">
+                      <Grid MinHeight="{x:Static local:InstallLayout.ProgressMinHeight}">
                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" Margin="0,0,0,9" />
-                        <Grid Grid.Row="1" Margin="0,0,0,8"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" Margin="{x:Static local:InstallLayout.NameMargin}" />
+                        <Grid Grid.Row="1" Margin="{x:Static local:InstallLayout.ProgressStatusMargin}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                           <TextBlock Text="{Binding Status}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Status}" Margin="0,0,10,0" />
                           <TextBlock Grid.Column="1" Text="{Binding ProgressText}" Style="{StaticResource Caption}" HorizontalAlignment="Right" />
                         </Grid>
@@ -103,7 +103,7 @@
                     </ItemsControl>
                   </StackPanel>
                 </Border>
-                <TextBlock Text="Phần trăm thể hiện tiến trình tải. Khi bộ cài không cung cấp %, MiniApps hiển thị trạng thái đang cài." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,14,0,0" />
+                <TextBlock Visibility="{x:Static local:InstallLayout.DescriptionVisibility}" Text="Phần trăm thể hiện tiến trình tải. Khi bộ cài không cung cấp %, MiniApps hiển thị trạng thái đang cài." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,14,0,0" />
               </StackPanel>
             </Border>
           </StackPanel>
@@ -113,7 +113,11 @@
             <StackPanel Margin="0,0,16,0"><TextBlock Text="{Binding SelectionText}" FontWeight="SemiBold" /><TextBlock Text="{Binding Summary}" Style="{StaticResource Caption}" Margin="0,5,0,7" TextWrapping="Wrap" /><ProgressBar Value="{Binding Overall, Mode=OneWay}" Height="3" Background="#E0E5EB" Foreground="{StaticResource Accent}" BorderThickness="0" Margin="0,7,0,0" /></StackPanel>
             <Button Grid.Column="1" Content="Dừng hàng đợi" Command="{Binding CancelCommand}" Visibility="{Binding ShowInstallCancel, Converter={StaticResource BoolVisibility}}" VerticalAlignment="Center" Margin="0,0,10,0" />
             <ComboBox x:Name="SuitePicker" Grid.Column="2" ItemsSource="{Binding OfficeSuites}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SelectedSuite}" IsEnabled="{Binding CanChooseSuite}" Width="180" Height="{Binding ActualHeight, ElementName=InstallButton}" VerticalAlignment="Center" Margin="0,0,10,0" ToolTip="Bộ văn phòng cài cùng lượt" AutomationProperties.Name="Bộ văn phòng" />
-            <Button x:Name="InstallButton" Grid.Column="3" Content="{Binding InstallButtonText}" Command="{Binding InstallCommand}" Style="{StaticResource Primary}" Width="120" VerticalAlignment="Center" />
+            <Button x:Name="InstallButton" Grid.Column="3" Content="{Binding InstallButtonText}" Command="{Binding InstallCommand}" Width="120" VerticalAlignment="Center">
+              <Button.Style><Style TargetType="Button" BasedOn="{StaticResource Primary}"><Style.Triggers>
+                <DataTrigger Binding="{Binding IsCancelButton}" Value="True"><Setter Property="Background" Value="#C62828"/><Setter Property="Foreground" Value="White"/></DataTrigger>
+              </Style.Triggers></Style></Button.Style>
+            </Button>
           </Grid>
         </Border>
       </Grid>

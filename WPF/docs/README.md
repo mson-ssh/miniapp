@@ -7,6 +7,7 @@
 | [AGENTS.md](../AGENTS.md) | Hướng dẫn AI và phạm vi thao tác |
 | [PROJECT-RULES.md](PROJECT-RULES.md) | Quyết định sản phẩm, runtime và phát hành |
 | [CURRENT-STATE.md](CURRENT-STATE.md) | Trạng thái bàn giao, giới hạn và việc còn lại |
+| [HANDOFF-2026-09-28.md](HANDOFF-2026-09-28.md) | Bàn giao phiên: Install/Information, CLEAN, HỦY, output review và điểm tiếp tục |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Sơ đồ source, cấu hình và luồng thực thi |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Chuyển máy, build/test/preview và GitHub |
 
