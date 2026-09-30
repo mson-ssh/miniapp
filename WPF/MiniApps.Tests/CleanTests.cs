@@ -58,6 +58,34 @@ internal static class CleanTests
             // Browsers are never closed for a run that is refused.
             Assert(File.Exists(sentinel) && closed == 0);
         });
+        check("CLEAN uses the account's Local\\Temp when bootstrap redirects %TEMP% to its session", () =>
+        {
+            // Only reads the scope; nothing is cleaned. Mirrors bootstrap: TEMP=<Temp>\MiniApps\<session>\temp.
+            var old = (Temp: Environment.GetEnvironmentVariable("TEMP"), Tmp: Environment.GetEnvironmentVariable("TMP"), Session: Environment.GetEnvironmentVariable("MINIAPPS_SESSION"));
+            var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var session = Path.Combine(local, @"Temp\MiniApps\session-fixture");
+            try
+            {
+                Environment.SetEnvironmentVariable("TEMP", Path.Combine(session, "temp")); Environment.SetEnvironmentVariable("TMP", Path.Combine(session, "temp"));
+                Environment.SetEnvironmentVariable("MINIAPPS_SESSION", session);
+                var scope = CleanService.CurrentScope();
+                Assert(CleanEngine.Full(scope.Temp).Equals(CleanEngine.Full(Path.Combine(scope.Local, "Temp")), StringComparison.OrdinalIgnoreCase));
+                Assert(CleanEngine.Under(scope.Temp, scope.UserRoot) && scope.ProtectedPaths.Contains(session));
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("TEMP", old.Temp); Environment.SetEnvironmentVariable("TMP", old.Tmp); Environment.SetEnvironmentVariable("MINIAPPS_SESSION", old.Session);
+            }
+        });
+        check("CLEAN keeps the running bootstrap session inside TEMP", () =>
+        {
+            var scope = Scope("clean-bootstrap");
+            var session = Path.Combine(scope.Temp, @"MiniApps\session-1");
+            var keep = new[] { Put(session, @"app\MiniApps.exe"), Put(session, @"temp\setup.tmp") };
+            var junk = Put(scope.Temp, "old-installer.tmp");
+            var result = new CleanEngine(scope with { ProtectedPaths = [Path.Combine(session, "app"), session] }, log).Run();
+            Assert(keep.All(File.Exists) && !File.Exists(junk) && result.Skipped == 0);
+        });
         check("CLEAN removes read-only and long-path TEMP files and Windows Temp, closing browsers first", () =>
         {
             var scope = Scope("clean-readonly");

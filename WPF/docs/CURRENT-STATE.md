@@ -1,5 +1,9 @@
 # Trạng thái bàn giao
 
+## Sửa CLEAN khi chạy qua bootstrap — 2026-09-30
+
+Người dùng báo trên v0.4.1: "CLEAN dừng: %TEMP% đã chuyển khỏi AppData\Local\Temp…". Nguyên nhân: bootstrap đổi %TEMP% của MiniApps sang thư mục phiên (`Temp\MiniApps\<phiên>\temp`), còn CLEAN đọc `Path.GetTempPath()`, nên mở bằng `irm | iex` là luôn từ chối. Đã code: `CleanService.CurrentScope()` dùng `LocalApplicationData\Temp`; test mô phỏng biến môi trường bootstrap và giữ thư mục phiên. Test net48 90 PASS + WPF. Chưa phát hành (v0.4.1 vẫn còn lỗi này); chưa build net10.
+
 ## Phát hành v0.4.1 — 2026-09-30
 
 Theo yêu cầu người dùng (chỉ build net48): AI chạy `Publish.ps1 -Target net48 -Version 0.4.1` và `gh release create v0.4.1` (target 863e6334c14809a8dcddadb8be858d051b723f0b). ZIP net48 545253 bytes, SHA-256 `3a6a4c19638b0ac543527e2a3daf31d82db6553c2dab4863c8f4857ab0f6579e`. Gói net10 là bản v0.3.6 dùng lại nguyên byte (63080335 bytes, `e1cbb8c3…f515`) do Publish.ps1 mặc định như vậy: fallback net10 của v0.4.1 cũ hơn v0.4.0 và chưa có HỦY/CLEAN mới; cập nhật khi người dùng yêu cầu net10. Trước upload: giải nén, ProductVersion 0.4.1+863e633, `--validate-config` và `--preview --startup-smoke-test` thoát 0. Sau upload: tải lại 5 asset đều 200, trùng byte. Bootstrap chuyển sang v0.4.1; Test-Bootstrap 8/8. Chưa chạy CLEAN thật.

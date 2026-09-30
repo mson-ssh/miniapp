@@ -44,6 +44,19 @@ internal static class CleanService
         if (!found) throw new IOException("Chưa xác minh được phiên đăng nhập Windows; CLEAN chưa xóa gì.");
     }
 
+    // Not Path.GetTempPath(): bootstrap points %TEMP% at its own session folder, and TEMP may be an
+    // 8.3 short path. The account's real temp folder is always Local\Temp; the bootstrap session
+    // inside it stays protected through MINIAPPS_SESSION and the MiniApps folder rule.
+    internal static CleanScope CurrentScope()
+    {
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        return new(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), local,
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Path.Combine(local, "Temp"),
+            [AppContext.BaseDirectory, Environment.GetEnvironmentVariable("MINIAPPS_SESSION") ?? ""],
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp"),
+            @"Software\Microsoft\Windows\CurrentVersion\Explorer");
+    }
+
     internal static Task<ExtensionRunResult> RunAsync(IProgress<string> progress) => Task.Run(() =>
     {
         Directory.CreateDirectory(ExtensionService.LogDirectory);
@@ -53,13 +66,7 @@ internal static class CleanService
         try
         {
             CheckInteractiveIdentity();
-            var scope = new CleanScope(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Path.GetTempPath(),
-                [AppContext.BaseDirectory, Environment.GetEnvironmentVariable("MINIAPPS_SESSION") ?? ""],
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp"),
-                @"Software\Microsoft\Windows\CurrentVersion\Explorer");
-            var result = new CleanEngine(scope, log, () => BrowserCloser.CloseAll(log)).Run();
+            var result = new CleanEngine(CurrentScope(), log, () => BrowserCloser.CloseAll(log)).Run();
             log.Report($"{(result.Skipped == 0 ? "Xong" : "Chưa dọn hết")}: {result.DeletedFiles} file · {result.Bytes / 1048576d:0.0} MB · {result.RecentLists} danh sách Recent · {result.HistoryDatabases} lịch sử Firefox · {result.InUse} file đang được dùng · giữ lại/bỏ qua {result.Skipped} mục.");
             return new ExtensionRunResult(result.Skipped == 0 ? 0 : 2, path);
         }
