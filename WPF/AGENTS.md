@@ -19,3 +19,5 @@
 ## Điểm vào trên máy mới
 
 Mở **thư mục WPF làm workspace** để AI đọc hướng dẫn này ngay từ đầu. Nếu mở gốc repo, yêu cầu AI đọc `WPF/AGENTS.md` trước. Không phụ thuộc lịch sử chat, đường dẫn `F:` hoặc checkout tạm của máy cũ.
+
+Từ 2026-09-30 dự án là một clone riêng của `miniapp.git` (máy phát triển: `F:\Project\miniapp`, workspace `F:\Project\miniapp\WPF`); commit/push trực tiếp tại đây. Thư mục cũ `scr-miniaz\WPF` trong repo CLI chỉ là bản sao lịch sử, không sửa hay push từ đó.

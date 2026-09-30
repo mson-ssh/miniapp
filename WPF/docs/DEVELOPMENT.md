@@ -40,11 +40,11 @@ Edition Developer (trang Setting, `Run-Developer.ps1`, cờ `MiniAppsEdition`) �
 
 Mang theo source `MiniApps/`, `MiniApps.Tests/`, `ReleaseConfig/`, các script/thông tin build, `AGENTS.md`, `docs/` và README. Có thể clone repo để lấy các file đã commit. Tài liệu chưa push phải sao chép riêng nếu đổi máy ngay.
 
-Không cần mang `bin/`, `obj/`, `artifacts/`, checkout tạm, NuGet cache hoặc token đăng nhập. Restore/build lại trên máy mới. Đường dẫn `F:\Project\scr-miniaz` và SDK dưới LocalAppData là đặc thù máy cũ, không phải yêu cầu của dự án.
+Không cần mang `bin/`, `obj/`, `artifacts/`, checkout tạm, NuGet cache hoặc token đăng nhập. Restore/build lại trên máy mới. Đường dẫn `F:\Project\miniapp` (trước đây `F:\Project\scr-miniaz`) và SDK dưới LocalAppData là đặc thù máy phát triển, không phải yêu cầu của dự án.
 
 ## Git và phát hành
 
-Chỉ commit/push khi người dùng yêu cầu. Trước đó kiểm tra `git remote -v`, branch, diff và trạng thái. Remote WPF đúng là **miniapp.git**, không phải **miniapps.git** của CLI. Checkout gốc máy cũ có WPF untracked và remote CLI; từng dùng checkout tạm riêng để push. Trên máy mới ưu tiên clone trực tiếp repo đúng, không phụ thuộc checkout tạm đó.
+Chỉ commit/push khi người dùng yêu cầu. Trước đó kiểm tra `git remote -v`, branch, diff và trạng thái. Remote WPF đúng là **miniapp.git**, không phải **miniapps.git** của CLI. Từ 2026-09-30 làm việc trực tiếp trong clone riêng của miniapp.git (máy phát triển: `F:\Project\miniapp`); gốc repo chứa `README.md` và thư mục `WPF/`. Không còn dùng thư mục WPF untracked trong repo CLI `scr-miniaz` hay checkout tạm để push.
 
 Chỉ chạy `Publish.ps1` khi được yêu cầu phát hành. Mặc định `-Target net48` build net48 và tải lại nguyên gói net10 v0.3.0 đã xác minh để giữ fallback. `-Target both` build cả hai và cần người dùng yêu cầu cập nhật net10. Build/test net48 luôn cần `-f net48`.
 

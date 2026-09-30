@@ -1,5 +1,9 @@
 # Trạng thái bàn giao
 
+## Tách khỏi repo cha — 2026-09-30
+
+Dự án giờ là clone riêng của https://github.com/mson-ssh/miniapp.git tại `F:\Project\miniapp` (workspace `WPF`), commit/push trực tiếp tại đây; không còn chép qua checkout tạm. So sánh với `scr-miniaz\WPF`: cùng tập file, nội dung trùng (bỏ qua CRLF); chỉ `artifacts/`, `bin/`, `obj/` là cục bộ và không mang theo. Build/test tại chỗ mới: net48 và net10 đều 0 warning/0 error, 102 PASS. Thư mục cũ `scr-miniaz\WPF` giữ nguyên, người dùng tự quyết định xóa; không sửa repo CLI.
+
 ## Phát hành v0.4.0 — 2026-09-30
 
 AI chạy `Publish.ps1 -Target both -Version 0.4.0` và `gh release create v0.4.0` (target commit d72aeed92d1815073c5688a216835a64d902fb30) theo yêu cầu người dùng. ZIP net48 542193 bytes, SHA-256 `85a69ce35cd8a5e2cbdb88d19384dca1a11349d59cb7ca10334e0a4baea8f868`; ZIP net10 self-contained 63136147 bytes, SHA-256 `8935a2f8639438391da2eb18bc4fced91b60e49dff0aaa39cacadd95656bc897`. Trước upload: giải nén cả hai, ProductVersion 0.4.0, `--validate-config` và `--preview --startup-smoke-test` thoát 0. Sau upload: tải lại 5 asset đều 200, trùng byte với bản build, khớp manifest. Bootstrap chuyển `ReleaseBase` sang v0.4.0; Test-Bootstrap 8/8. ProductVersion mang hậu tố mã commit repo cha (a61bef3) do build trong checkout cha; chỉ là metadata. Chưa kiểm thử HỦY với MSI/EXE thực hay CLEAN trên profile thật.
