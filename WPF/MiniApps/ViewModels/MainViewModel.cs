@@ -138,12 +138,13 @@ public sealed class MainViewModel : Observable
             "Chia sẻ ổ đĩa/thư mục qua mạng LAN không cần mật khẩu, kết nối tới máy đang chia sẻ, quản lý hoặc chẩn đoán. Mở trong cửa sổ PowerShell riêng.",
             "Mở", "", interactive: true),
         new("clean", "CLEAN",
-            "Dọn file tạm, lịch sử và cache trình duyệt của tài khoản Windows hiện tại.",
+            "Dọn file tạm của Windows, danh sách Recent, lịch sử và cache trình duyệt của tài khoản Windows hiện tại.",
             "Dọn dẹp",
             "Chạy CLEAN cho tài khoản " + Environment.UserName + "?\n\n" +
-            "• Xóa file trong %TEMP% và lịch sử/cache của các profile trình duyệt được hỗ trợ.\n" +
-            "• Giữ cookie/đăng nhập, mật khẩu, dấu trang và file đã tải.\n" +
-            "• Hãy đóng trình duyệt trước. Trình duyệt còn mở (kể cả chạy nền như Startup boost của Edge) sẽ được bỏ qua, không bị ép tắt.\n" +
+            "• Xóa file trong %TEMP% và C:\\Windows\\Temp.\n" +
+            "• Xóa Recent của Windows: file gần đây, jump list, lịch sử Run, thanh địa chỉ và tìm kiếm Explorer, hộp Mở/Lưu. Giữ thư mục ghim Quick access.\n" +
+            "• Xóa lịch sử/cache của các profile trình duyệt được hỗ trợ; giữ cookie/đăng nhập, mật khẩu, dấu trang và file đã tải.\n" +
+            "• Trình duyệt đang mở (kể cả chạy nền) sẽ bị ĐÓNG để dọn. Hãy lưu nội dung đang nhập trên web trước.\n" +
             "• Không chạy khi phần mềm khác đang cài đặt.\n" +
             "• File đang dùng, liên kết thư mục và thư mục backup được giữ lại.\n\n" +
             "Dữ liệu đã xóa không vào Thùng rác. Chỉ dọn dữ liệu cục bộ; đồng bộ có thể đưa lịch sử trở lại.\n" +

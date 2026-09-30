@@ -50,9 +50,59 @@ internal static class CleanTests
         {
             var scope = Scope("clean-busy");
             var sentinel = Put(scope.Temp, "sentinel.tmp");
-            Reject(() => new CleanEngine(scope with { Temp = scope.UserRoot }, log).Run());
-            Reject(() => new CleanEngine(scope with { Temp = Path.Combine(root, "other-account", "Temp") }, log).Run());
-            Assert(File.Exists(sentinel));
+            var closed = 0;
+            Reject(() => new CleanEngine(scope with { Temp = scope.UserRoot }, log, () => closed++).Run());
+            Reject(() => new CleanEngine(scope with { Temp = Path.Combine(root, "other-account", "Temp") }, log, () => closed++).Run());
+            Reject(() => new CleanEngine(scope with { SystemTemp = scope.UserRoot }, log, () => closed++).Run());
+            Reject(() => new CleanEngine(scope with { SystemTemp = Path.GetPathRoot(root)! + "Temp" }, log, () => closed++).Run());
+            // Browsers are never closed for a run that is refused.
+            Assert(File.Exists(sentinel) && closed == 0);
+        });
+        check("CLEAN removes read-only and long-path TEMP files and Windows Temp, closing browsers first", () =>
+        {
+            var scope = Scope("clean-readonly");
+            var systemTemp = Path.Combine(root, @"clean-readonly-windows\Windows\Temp");
+            var readOnly = Put(scope.Temp, @"setup\payload.msi"); File.SetAttributes(readOnly, FileAttributes.ReadOnly);
+            var folder = Path.Combine(scope.Temp, "setup"); new DirectoryInfo(folder).Attributes |= FileAttributes.ReadOnly;
+            var deep = scope.Temp;
+            for (var i = 0; i < 12; i++) deep = Path.Combine(deep, new string((char)('a' + i), 24));
+            var longFile = Put(@"\\?\" + deep, "long.tmp");
+            var windowsJunk = Put(systemTemp, @"svc\log.tmp"); var held = Put(systemTemp, "held.tmp");
+            var closed = 0;
+            using (new FileStream(held, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                var result = new CleanEngine(scope with { SystemTemp = systemTemp }, log, () => { closed++; Assert(File.Exists(readOnly)); }).Run();
+                Assert(longFile.Length > 260 && closed == 1 && result.Skipped == 0 && result.InUse == 1);
+            }
+            Assert(!File.Exists(readOnly) && !Directory.Exists(folder) && !File.Exists(longFile) && !File.Exists(windowsJunk));
+            Assert(File.Exists(held) && Directory.Exists(systemTemp) && Directory.Exists(scope.Temp));
+        });
+        check("CLEAN clears Windows Recent items and Explorer lists but keeps Quick access pins", () =>
+        {
+            var scope = Scope("clean-recent");
+            var recent = Path.Combine(scope.Roaming, @"Microsoft\Windows\Recent");
+            var delete = new[] { Put(recent, "report.docx.lnk"), Put(recent, @"AutomaticDestinations\5f7b5f1e01b83767.automaticDestinations-ms"),
+                Put(recent, @"CustomDestinations\28c8b86deab549a1.customDestinations-ms") };
+            var keep = new[] { Put(recent, "desktop.ini"), Put(recent, @"AutomaticDestinations\f01b4d95cf55d32a.automaticDestinations-ms"), Put(scope.Roaming, @"Microsoft\Windows\Start Menu\app.lnk") };
+            // A fixture key under HKCU\Software only, never Explorer's real one.
+            const string key = @"Software\MiniAppsCleanTest\Explorer";
+            using (var explorer = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(key))
+            {
+                using (var docs = explorer.CreateSubKey(@"RecentDocs\.docx")) docs.SetValue("0", new byte[] { 1 });
+                using (var run = explorer.CreateSubKey("RunMRU")) { run.SetValue("a", "cmd\\1"); run.SetValue("MRUList", "a"); }
+                using (var dialog = explorer.CreateSubKey(@"ComDlg32\OpenSavePidlMRU\*")) dialog.SetValue("0", new byte[] { 1 });
+                using (var other = explorer.CreateSubKey("Advanced")) other.SetValue("Hidden", 1);
+            }
+            try
+            {
+                var result = new CleanEngine(scope with { ExplorerKey = key }, log).Run();
+                Assert(result.Skipped == 0 && result.RecentLists == 3 && delete.All(path => !File.Exists(path)) && keep.All(File.Exists));
+                using var explorer = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(key)!;
+                using var docs = explorer.OpenSubKey("RecentDocs")!; using var run = explorer.OpenSubKey("RunMRU")!;
+                using var dialog = explorer.OpenSubKey(@"ComDlg32\OpenSavePidlMRU")!; using var other = explorer.OpenSubKey("Advanced")!;
+                Assert(docs.SubKeyCount == 0 && run.ValueCount == 0 && dialog.SubKeyCount == 0 && (int)other.GetValue("Hidden")! == 1);
+            }
+            finally { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(@"Software\MiniAppsCleanTest", false); }
         });
         check("CLEAN skips only the browser holding its profile lock (e.g. Edge Startup boost) and cleans the rest", () =>
         {

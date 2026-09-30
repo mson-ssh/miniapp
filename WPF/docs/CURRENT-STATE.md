@@ -1,5 +1,9 @@
 # Trạng thái bàn giao
 
+## Sửa CLEAN — 2026-09-30
+
+Người dùng báo CLEAN lỗi. Chẩn đoán chỉ-đọc trên máy phát triển: 600 file chỉ-đọc trong TEMP bị giữ lại và tính là bỏ qua (luôn "Chưa dọn hết"), đường dẫn >260 ký tự không truy cập được trên net48, Chrome đang chạy nên cả trình duyệt bị bỏ qua. Đã code: bỏ cờ ReadOnly trước khi xóa, tiền tố `\\?\` cho đường dẫn dài, không có quyền trong TEMP tính là "đang được dùng"; thêm C:\Windows\Temp, Recent của Windows (thư mục Recent, jump list, MRU Explorer trong HKCU, giữ ghim Quick access); tự đóng trình duyệt (người dùng chọn) sau khi kiểm tra phạm vi. Test net48 88 PASS + WPF; build net48 vào `artifacts/clean-fix-20260930` kèm ReleaseConfig. Chưa build/test net10 (source dùng chung đã đổi). Chưa chạy CLEAN thật; chưa phát hành. Chi tiết: docs/CLEAN.md.
+
 ## Tách khỏi repo cha — 2026-09-30
 
 Dự án giờ là clone riêng của https://github.com/mson-ssh/miniapp.git tại `F:\Project\miniapp` (workspace `WPF`), commit/push trực tiếp tại đây; không còn chép qua checkout tạm. So sánh với `scr-miniaz\WPF`: cùng tập file, nội dung trùng (bỏ qua CRLF); chỉ `artifacts/`, `bin/`, `obj/` là cục bộ và không mang theo. Build/test tại chỗ mới: net48 và net10 đều 0 warning/0 error, 102 PASS. Thư mục cũ `scr-miniaz\WPF` giữ nguyên, người dùng tự quyết định xóa; không sửa repo CLI.
