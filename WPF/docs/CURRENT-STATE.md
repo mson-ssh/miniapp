@@ -1,10 +1,14 @@
 # Trạng thái bàn giao
 
+## Phát hành v0.4.0 — 2026-09-30
+
+AI chạy `Publish.ps1 -Target both -Version 0.4.0` và `gh release create v0.4.0` (target commit d72aeed92d1815073c5688a216835a64d902fb30) theo yêu cầu người dùng. ZIP net48 542193 bytes, SHA-256 `85a69ce35cd8a5e2cbdb88d19384dca1a11349d59cb7ca10334e0a4baea8f868`; ZIP net10 self-contained 63136147 bytes, SHA-256 `8935a2f8639438391da2eb18bc4fced91b60e49dff0aaa39cacadd95656bc897`. Trước upload: giải nén cả hai, ProductVersion 0.4.0, `--validate-config` và `--preview --startup-smoke-test` thoát 0. Sau upload: tải lại 5 asset đều 200, trùng byte với bản build, khớp manifest. Bootstrap chuyển `ReleaseBase` sang v0.4.0; Test-Bootstrap 8/8. ProductVersion mang hậu tố mã commit repo cha (a61bef3) do build trong checkout cha; chỉ là metadata. Chưa kiểm thử HỦY với MSI/EXE thực hay CLEAN trên profile thật.
+
 ## Đồng bộ net10 theo net48 — 2026-09-30, local
 
 Theo yêu cầu người dùng lấy net48 làm chuẩn: gỡ toàn bộ `#if NET48` trong source và test, cả hai target dùng cùng code: HỦY đỏ với Job riêng từng tác vụ và lối thoát khi treo, CLEAN, Information tối thiểu (Read-Information.ps1 nhúng cho cả hai; net10 không còn nhúng tool/Info/info.ps1), cửa sổ giữ chung kích thước (bỏ FitInformationHeight/ContentOverflow), thẻ Install gọn. Khác biệt còn lại chỉ ở csproj (gói/tham chiếu riêng net48) và IsExternalInit. Fixture test HỦY lấy đường dẫn exe của tiến trình thay cho Assembly.Location (net10 là .dll).
 
-Kiểm tra: build net48 và net10 đều 0 warning/0 error; mỗi target 86 logic + 16 WPF PASS, mã 0; `--information-audit` thật đạt trên cả hai (khoảng 0,5–0,9 s, không in định danh). Output artifacts/review-net48-synced-20260930-084802 và artifacts/review-net10.0-windows-synced-20260930-084802 (self-contained win-x64 như Publish.ps1) kèm ReleaseConfig; validate và preview startup smoke thoát 0. Không chạy cài đặt/CLEAN thật; chưa commit/push/phát hành. Lần push trước (2026-09-28) bị chặn quyền, chưa lên GitHub.
+Kiểm tra: build net48 và net10 đều 0 warning/0 error; mỗi target 86 logic + 16 WPF PASS, mã 0; `--information-audit` thật đạt trên cả hai (khoảng 0,5–0,9 s, không in định danh). Output artifacts/review-net48-synced-20260930-084802 và artifacts/review-net10.0-windows-synced-20260930-084802 (self-contained win-x64 như Publish.ps1) kèm ReleaseConfig; validate và preview startup smoke thoát 0. Không chạy cài đặt/CLEAN thật. Đã push lên https://github.com/mson-ssh/miniapp.git main, commit d72aeed (từ b8d643c); chưa tạo Release, bootstrap vẫn v0.3.9.
 
 ## Thoát khi HỦY bị treo — 2026-09-28, local, net48
 
