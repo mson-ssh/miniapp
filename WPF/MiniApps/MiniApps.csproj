@@ -10,6 +10,8 @@
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Built by tool/AppIcon/New-AppIcon.ps1. -->
+    <ApplicationIcon>MiniApps.ico</ApplicationIcon>
     <AssemblyName>MiniApps</AssemblyName>
     <Version>0.3.8</Version>
   </PropertyGroup>
@@ -19,6 +21,7 @@
     <Reference Include="System.Net.Http" />
   </ItemGroup>
   <ItemGroup>
+    <Resource Include="MiniApps.ico" />
     <Content Include="Scripts\Configure-Windows.ps1" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Scripts\Update-Winget.ps1;Scripts\Invoke-Win11Debloat.ps1;Scripts\Install-CppEnvironment.ps1;Scripts\Enable-Smb.ps1;Scripts\Split-Disk.ps1;Scripts\Remove-Office.ps1" />
     <EmbeddedResource Include="..\tool\Share LAN\Share-LAN.ps1" LogicalName="MiniApps.Scripts.Share-LAN.ps1" />

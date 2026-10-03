@@ -927,6 +927,15 @@ var renderThread = new Thread(() =>
             !string.Equals(((System.Windows.Controls.ListBoxItem)navigation.Items[1]).Content?.ToString(), secondPage, StringComparison.Ordinal) ||
             !string.Equals(((System.Windows.Controls.ListBoxItem)navigation.Items[2]).Content?.ToString(), "EXTEND", StringComparison.Ordinal))
             throw new Exception("Navigation must expose Install Software, the second page and EXTEND.");
+        // The app grid logo: the window icon (all ten sizes of MiniApps.ico), the exe icon and the sidebar mark.
+        var brandMark = (System.Windows.FrameworkElement)publicWindow.FindName("BrandMark");
+        var iconFrames = publicWindow.Icon is System.Windows.Media.Imaging.BitmapFrame iconFrame ? iconFrame.Decoder.Frames.Count : 0;
+        // net10 builds MiniApps.dll beside its MiniApps.exe apphost, which carries the icon.
+        var exeIcons = ExtractIconEx(Path.ChangeExtension(typeof(MiniApps.MainWindow).Assembly.Location, ".exe"), -1, null, null, 0);
+        if (iconFrames != 10 || brandMark == null || !brandMark.IsVisible || brandMark.ActualWidth <= 0 || exeIcons == 0)
+            throw new Exception($"The MiniApps logo must be the window icon, the exe icon and the sidebar mark ({iconFrames} frames, {exeIcons} exe icons).");
+        [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        static extern uint ExtractIconEx(string file, int index, IntPtr[]? large, IntPtr[]? small, uint count);
         publicVm.Page = 2;
         publicWindow.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
         publicWindow.UpdateLayout();
