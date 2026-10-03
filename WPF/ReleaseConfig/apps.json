@@ -93,9 +93,9 @@
     {
       "Id": "libreoffice",
       "Name": "LibreOffice",
-      "Url": "https://downloadarchive.documentfoundation.org/libreoffice/old/26.2.6.3/win/x86_64/LibreOffice_26.2.6.3_Win_x86-64.msi",
+      "Url": "https://mirror.freedif.org/TDF/libreoffice/stable/26.8.0/win/x86_64/LibreOffice_26.8.0_Win_x86-64.msi",
       "Arguments": "/qn /norestart",
-      "Sha256": "f9877032fd908beb9c0ddf06df4af5c2e85f419c42e14876c4cce5aae5fb2660",
+      "Sha256": "4aa6c6e1895f4055104effcb556bd3362d20c6ad707c149543304f395ef9db95",
       "Suite": "LibreOffice"
     },
     {

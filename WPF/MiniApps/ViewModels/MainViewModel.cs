@@ -87,7 +87,7 @@ public sealed class MainViewModel : Observable
         new("WPS", "WPS"),
         new("OnlyOffice", "OnlyOffice"),
         new("LibreOffice", "Libre Office"),
-        new("", "Null")
+        new("", "Chọn Office")
     ];
     private string selectedSuite = "";
     public string SelectedSuite
@@ -158,7 +158,7 @@ public sealed class MainViewModel : Observable
     public string SingleInstallIcon => "M 8,0 L 12,0 L 12,8 L 16,8 L 10,14 L 4,8 L 8,8 Z M 0,13 L 3,13 L 3,17 L 17,17 L 17,13 L 20,13 L 20,20 L 0,20 Z";
     public double SingleInstallIconSize => 18;
     public string SingleInstallIconColor => "#111111";
-    public string SingleInstallHint => "Chọn bộ văn phòng ở danh sách cạnh nút Cài đặt (Null: không cài bộ nào); chọn WPS, OnlyOffice hoặc Libre Office sẽ gỡ Microsoft Office đang có trên máy. Nút tải xuống ở từng ứng dụng để cài riêng ứng dụng đó.";
+    public string SingleInstallHint => "Chọn bộ văn phòng ở danh sách cạnh nút Cài đặt (Chọn Office: không cài bộ nào); chọn WPS, OnlyOffice hoặc Libre Office sẽ gỡ Microsoft Office đang có trên máy. Nút tải xuống ở từng ứng dụng để cài riêng ứng dụng đó.";
     private bool busy;
     public bool IsBusy { get => busy; private set { if (Set(ref busy, value)) { Raise(nameof(IsIdle)); Raise(nameof(ShowInstallCancel)); Raise(nameof(CanChooseSuite)); Refresh(); } } }
     public bool IsIdle => !IsBusy;

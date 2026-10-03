@@ -134,7 +134,7 @@ try
     Check("All built-ins expose nonempty executable scripts", () => {
         var settings = WindowsSettingsCatalog.Defaults(); WindowsSettingsCatalog.Validate(settings);
         Assert(settings.All(s => !string.IsNullOrWhiteSpace(s.Script)));
-        Assert(settings.Single(s => s.Id == "Winget").Script.Contains("https://"));
+        Assert(settings.Single(s => s.Id == "InfoExe").Script.Contains("https://") && settings.All(s => s.Action != "Winget"));
         Assert(settings.All(s => s.Id != "Debloat" && s.Action != "Debloat"));
         settings[0].Script = ""; Reject(() => WindowsSettingsCatalog.Validate(settings));
     });
@@ -304,7 +304,7 @@ try
         WaitWithTimeout(operation, TimeSpan.FromSeconds(2)).GetAwaiter().GetResult();
         Assert(clock.Elapsed < TimeSpan.FromSeconds(2) && outcomes.Last().Status == "Đã hủy" && outcomes.Last().Finished && !outcomes.Last().Failed);
     });
-    Check("Install includes all remaining Windows settings without selection state", () => { var vm = new MainViewModel(true); Assert(vm.Apps.Count == 10 && vm.WindowsOptions.Count == 12 && vm.WindowsOptions.All(o => !MainViewModel.IsDebloat(o.Definition)) && typeof(WindowsOption).GetProperty("Selected") == null && vm.SelectionText == "11 ứng dụng · 11 thiết lập Windows"); });
+    Check("Install includes all remaining Windows settings without selection state", () => { var vm = new MainViewModel(true); Assert(vm.Apps.Count == 10 && vm.WindowsOptions.Count == 11 && vm.WindowsOptions.All(o => !MainViewModel.IsDebloat(o.Definition)) && typeof(WindowsOption).GetProperty("Selected") == null && vm.SelectionText == "11 ứng dụng · 10 thiết lập Windows"); });
     Check("Disk setting keeps the CLI partitioning rules", () => {
         var setting = WindowsSettingsCatalog.Defaults().Single(s => s.Id == "Disk");
         foreach (var part in new[] { "SizeD = 50.1GB", "SizeD = 200.1GB", "SizeD = 400.1GB; SizeE = 200.1GB", "$totalGB -gt 1100",
@@ -346,9 +346,9 @@ try
         var placeholders = DeviceInfoService.Resolve("PC", "Dell", "System Product Name", "System Serial Number");
         Assert(placeholders.Model == "Không xác định" && placeholders.Serial == "Không xác định");
     });
-    Check("Office suite picker defaults to Null and filters the install list", () => {
+    Check("Office suite picker defaults to Chọn Office (none) and filters the install list", () => {
         var vm = new MainViewModel(true);
-        Assert(vm.SelectedSuite == "" && vm.CanChooseSuite && vm.OfficeSuites.Select(o => o.Label).SequenceEqual(new[] { "Microsoft Office", "WPS", "OnlyOffice", "Libre Office", "Null" }));
+        Assert(vm.SelectedSuite == "" && vm.CanChooseSuite && vm.OfficeSuites.Select(o => o.Label).SequenceEqual(new[] { "Microsoft Office", "WPS", "OnlyOffice", "Libre Office", "Chọn Office" }));
         Assert(vm.Apps.Count == 10 && vm.Apps.All(a => a.Definition.Suite == "") && vm.SelectionText.StartsWith("11 ứng dụng"));
         foreach (var suite in new[] { "Office", "WPS", "OnlyOffice", "LibreOffice" })
         {
@@ -406,8 +406,8 @@ try
     Check("System tasks route through runner and preserve failure results", () => {
         var commands = new System.Collections.Concurrent.ConcurrentBag<string>(); var outcomes = new System.Collections.Concurrent.ConcurrentBag<DeploymentEvent>();
         var service = new DeploymentService(run: (command, _, _) => { commands.Add(command); return Task.FromResult(0); });
-        service.RunAsync([], WindowsSettingsCatalog.Defaults().Where(s => s.Action == "Winget").ToArray(), Path.Combine(root, "system"), new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(_ => { }), default).GetAwaiter().GetResult();
-        Assert(commands.Count == 1 && commands.Any(c => c.Contains("setting-Winget.ps1")) && outcomes.Any(e => e.Id == "windows:Winget" && e.Finished && !e.Failed));
+        service.RunAsync([], WindowsSettingsCatalog.Defaults().Where(s => s.Action == "Smb").ToArray(), Path.Combine(root, "system"), new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(_ => { }), default).GetAwaiter().GetResult();
+        Assert(commands.Count == 1 && commands.Any(c => c.Contains("setting-Smb.ps1")) && outcomes.Any(e => e.Id == "windows:Smb" && e.Finished && !e.Failed));
     });
     Check("EVKey waits for its installer only, not the EVKey it leaves running", () => {
         var apps = Catalog.Defaults();
@@ -464,7 +464,7 @@ try
     });
     Check("Windows 10 1809 compatible settings execute", () =>
     {
-        Assert(WindowsCompatibility.MinimumBuildFor(WindowsSettingsCatalog.Defaults().Single(s => s.Action == "Winget")) == 17763);
+        Assert(WindowsCompatibility.MinimumBuildFor(WindowsSettingsCatalog.Defaults().Single(s => s.Action == "Smb")) == 17763);
         Assert(WindowsCompatibility.MinimumBuildFor(new WindowsSettingDefinition { Action = "Custom" }) == 17763);
         var calls = 0;
         var outcomes = new List<DeploymentEvent>();
@@ -480,6 +480,36 @@ try
         var service = new DeploymentService(client, (_, _, _) => Task.FromResult(0), _ => false);
         service.RunAsync(Catalog.Defaults().Take(8).ToArray(), [], Path.Combine(root, "downloads"), new InlineProgress<DeploymentEvent>(_ => { }), new InlineProgress<string>(_ => { }), default).GetAwaiter().GetResult();
         Assert(handler.Calls == 8 && handler.MaxActive == 8);
+    });
+    Check("Large downloads split into parallel byte ranges and verify SHA-256", () => {
+        var data = RangeHttp.Payload(20 * 1024 * 1024 + 123);
+        using var handler = new RangeHttp(data); using var client = new System.Net.Http.HttpClient(handler);
+        var app = Catalog.Defaults().First(); app.Url = "https://example.com/big.exe"; app.Sha256 = RangeHttp.Sha256(data);
+        var outcomes = new System.Collections.Concurrent.ConcurrentBag<DeploymentEvent>();
+        new DeploymentService(client, (_, _, _) => Task.FromResult(0), _ => false).RunAsync([app], [], Path.Combine(root, "ranges"),
+            new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(_ => { }), default).GetAwaiter().GetResult();
+        Assert(outcomes.Any(e => e.Id == app.Id && e.Status == "Hoàn tất" && !e.Failed));
+        Assert(handler.Starts.Count == DeploymentService.SegmentCount && handler.Starts.Distinct().Count() == DeploymentService.SegmentCount);
+    });
+    Check("Interrupted download resumes from the last byte instead of starting over", () => {
+        var data = RangeHttp.Payload(3 * 1024 * 1024);
+        using var handler = new RangeHttp(data) { CutAfter = 1024 * 1024 }; using var client = new System.Net.Http.HttpClient(handler);
+        var app = Catalog.Defaults().First(); app.Url = "https://example.com/small.exe"; app.Sha256 = RangeHttp.Sha256(data);
+        var outcomes = new System.Collections.Concurrent.ConcurrentBag<DeploymentEvent>(); var lines = new System.Collections.Concurrent.ConcurrentBag<string>();
+        new DeploymentService(client, (_, _, _) => Task.FromResult(0), _ => false, delay: (_, _) => Task.CompletedTask).RunAsync([app], [], Path.Combine(root, "resume"),
+            new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(lines.Add), default).GetAwaiter().GetResult();
+        Assert(outcomes.Any(e => e.Id == app.Id && e.Status == "Hoàn tất" && !e.Failed));
+        // One cut response, then a request that continues exactly where it stopped.
+        Assert(handler.Starts.SequenceEqual(new long[] { 0, 1024 * 1024 }) && lines.Any(line => line.Contains("tải tiếp từ 1.0 MB")));
+    });
+    Check("A segment that keeps failing fails the app with its own error", () => {
+        var data = RangeHttp.Payload(20 * 1024 * 1024);
+        using var handler = new RangeHttp(data) { FailFrom = 10 * 1024 * 1024 }; using var client = new System.Net.Http.HttpClient(handler);
+        var app = Catalog.Defaults().First(); app.Url = "https://example.com/broken.exe";
+        var outcomes = new System.Collections.Concurrent.ConcurrentBag<DeploymentEvent>(); var lines = new System.Collections.Concurrent.ConcurrentBag<string>();
+        new DeploymentService(client, (_, _, _) => throw new Exception("Must not launch"), _ => false).RunAsync([app], [], Path.Combine(root, "broken"),
+            new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(lines.Add), default).GetAwaiter().GetResult();
+        Assert(outcomes.Any(e => e.Id == app.Id && e.Status == "Thất bại" && e.Failed) && lines.Any(line => line.Contains("500")) && !lines.Any(line => line.Contains("disposed")));
     });
     Check("MSI installers are serialized while EXE can overlap MSI", () => {
         using var client = new System.Net.Http.HttpClient(new FakeHttp());
@@ -697,7 +727,7 @@ var renderThread = new Thread(() =>
         var suitePicker = (System.Windows.Controls.ComboBox)window.FindName("SuitePicker");
         window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
         if (suitePicker.Items.Count != 5 || (string)suitePicker.SelectedValue != "" || !suitePicker.IsEnabled || vm.Apps.Count != 10)
-            throw new Exception("The office suite picker must list five choices and default to Null.");
+            throw new Exception("The office suite picker must list five choices and default to Chọn Office (none).");
         suitePicker.SelectedValue = "WPS";
         if (vm.SelectedSuite != "WPS" || !vm.Apps.Any(a => a.Definition.Id == "wps") || vm.Apps.Count != 11)
             throw new Exception("Picking a suite in the drop list must update the install list.");
@@ -839,7 +869,7 @@ var renderThread = new Thread(() =>
         timer.Tick += (_, _) => { if (!vm.IsBusy || (DateTime.UtcNow - started).TotalSeconds > 10) frame.Continue = false; };
         timer.Start(); System.Windows.Threading.Dispatcher.PushFrame(frame); timer.Stop();
         if (vm.IsBusy || !vm.Summary.StartsWith("Hoàn tất") || vm.Overall != 100 || vm.Apps.Any(a => a.Progress != 100)) throw new Exception("Preview command did not complete: " + vm.Summary);
-        if (vm.WindowsTaskDetails.Count != 11 || vm.WindowsTaskDetails.Any(t => t.Progress != 100 || t.Name == "Debloatware Windows") || vm.IsWindowsDetailsVisible) throw new Exception("Windows detail rows were not prepared correctly.");
+        if (vm.WindowsTaskDetails.Count != 10 || vm.WindowsTaskDetails.Any(t => t.Progress != 100 || t.Name == "Debloatware Windows") || vm.IsWindowsDetailsVisible) throw new Exception("Windows detail rows were not prepared correctly.");
         var debloatCard = vm.ProgressRows.SingleOrDefault(row => row.Name == "Debloatware Windows");
         if (debloatCard == null || debloatCard.IsWindowsSummary || debloatCard.Status != "Hoàn tất · mô phỏng" || debloatCard.Progress != 100 || vm.ProgressRows.Last().Name != "Windows Setting")
             throw new Exception("Debloat must show as its own card, like an app being installed.");
@@ -941,7 +971,7 @@ var renderThread = new Thread(() =>
         var wpsTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
         wpsTimer.Tick += (_, _) => { if (!wpsVm.IsBusy || (DateTime.UtcNow - wpsStarted).TotalSeconds > 10) wpsFrame.Continue = false; };
         wpsTimer.Start(); System.Windows.Threading.Dispatcher.PushFrame(wpsFrame); wpsTimer.Stop();
-        if (wpsVm.IsBusy || wpsVm.WindowsTaskDetails.Count != 12 || wpsVm.WindowsTaskDetails[0].Name != "Gỡ Microsoft Office" || wpsVm.WindowsTaskDetails[0].Progress != 100)
+        if (wpsVm.IsBusy || wpsVm.WindowsTaskDetails.Count != 11 || wpsVm.WindowsTaskDetails[0].Name != "Gỡ Microsoft Office" || wpsVm.WindowsTaskDetails[0].Progress != 100)
             throw new Exception($"Installing WPS must first remove Microsoft Office: {string.Join(", ", wpsVm.WindowsTaskDetails.Select(t => t.Name))}.");
         Console.WriteLine("PASS WPF WPS install removes Microsoft Office as a Windows task");
         var heightBeforeInformation = publicWindow.Height;
@@ -1113,6 +1143,58 @@ sealed class FakeHttp : System.Net.Http.HttpMessageHandler
         { RequestMessage = request, Content = new System.Net.Http.ByteArrayContent(request.RequestUri!.AbsolutePath.EndsWith(".msi")
             ? [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1] : [0x4D, 0x5A, 0, 0, 0, 0, 0, 0]) });
     }
+}
+// Serves one payload with HTTP range support. CutAfter ends the first response early (a dropped
+// connection); FailFrom answers 500 to ranges starting at or after that offset.
+sealed class RangeHttp(byte[] data) : System.Net.Http.HttpMessageHandler
+{
+    public long CutAfter { get; set; } = -1;
+    public long FailFrom { get; set; } = -1;
+    public System.Collections.Concurrent.ConcurrentQueue<long> Starts { get; } = new();
+    private int cut;
+    public static byte[] Payload(int size)
+    {
+        var bytes = new byte[size]; new Random(7).NextBytes(bytes); bytes[0] = 0x4D; bytes[1] = 0x5A; return bytes;
+    }
+    public static string Sha256(byte[] bytes)
+    {
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        return BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "");
+    }
+    protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(System.Net.Http.HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var range = request.Headers.Range?.Ranges.Single();
+        var from = range?.From ?? 0; var to = range?.To ?? data.Length - 1;
+        Starts.Enqueue(from);
+        if (FailFrom >= 0 && from >= FailFrom)
+            return Task.FromResult(new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.InternalServerError) { RequestMessage = request });
+        var length = (int)(to - from + 1);
+        Stream body = new MemoryStream(data, (int)from, length, false);
+        if (CutAfter >= 0 && Interlocked.Exchange(ref cut, 1) == 0) body = new CutStream(body, CutAfter);
+        var content = new System.Net.Http.StreamContent(body);
+        content.Headers.ContentLength = length;
+        content.Headers.ContentRange = new System.Net.Http.Headers.ContentRangeHeaderValue(from, to, data.Length);
+        return Task.FromResult(new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.PartialContent) { RequestMessage = request, Content = content });
+    }
+}
+sealed class CutStream(Stream inner, long limit) : Stream
+{
+    private long read;
+    public override bool CanRead => true;
+    public override bool CanSeek => false;
+    public override bool CanWrite => false;
+    public override long Length => throw new NotSupportedException();
+    public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+    public override void Flush() { }
+    public override int Read(byte[] buffer, int offset, int count)
+    {
+        if (read >= limit) throw new IOException("fixture connection reset");
+        var size = inner.Read(buffer, offset, (int)Math.Min(count, limit - read));
+        read += size; return size;
+    }
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+    public override void SetLength(long value) => throw new NotSupportedException();
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 }
 sealed class ConcurrentHttp(int expected) : System.Net.Http.HttpMessageHandler
 {

@@ -226,44 +226,20 @@ public sealed class DeploymentService
         catch { return ""; }
     }
 
+    // Files this large are fetched as parallel byte ranges when the server supports them.
+    internal const long SegmentThreshold = 16L * 1024 * 1024;
+    internal const int SegmentCount = 4;
+    private static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(90);
+
     private async Task<string> DownloadAsync(AppDefinition app, string workDir, IProgress<DeploymentEvent> events, IProgress<string> log, CancellationToken token)
     {
         var path = Path.Combine(workDir, app.Id + Path.GetExtension(new Uri(app.Url).AbsolutePath));
-        for (var attempt = 1; attempt <= 3; attempt++)
+        // Interrupted transfers resume inside FetchAsync; only a file that fails its check is fetched again.
+        for (var attempt = 1; ; attempt++)
         {
             try
             {
-                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
-                deadline.CancelAfter(TimeSpan.FromSeconds(90));
-                using var response = await http.GetAsync(app.Url, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
-                response.EnsureSuccessStatusCode();
-                if (response.RequestMessage?.RequestUri?.Scheme != "https") throw new InvalidDataException("Chuyển hướng tải không an toàn.");
-                using var input = await response.Content.ReadAsStreamAsync();
-                using (var output = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
-                using (deadline.Token.Register(() =>
-                {
-                    // Framework response streams do not consistently observe cancellation while a read is stalled.
-                    try { input.Dispose(); } catch { }
-                    try { response.Dispose(); } catch { }
-                }))
-                {
-                    var total = response.Content.Headers.ContentLength;
-                    var buffer = new byte[81920]; long received = 0;
-                    var clock = Stopwatch.StartNew();
-                    while (true)
-                    {
-                        deadline.CancelAfter(TimeSpan.FromSeconds(90));
-                        var size = await input.ReadAsync(buffer, 0, buffer.Length, deadline.Token);
-                        if (size == 0) break;
-                        await output.WriteAsync(buffer, 0, size, deadline.Token);
-                        received += size;
-                        if (clock.ElapsedMilliseconds < 250) continue;
-                        var percent = total > 0 ? received * 100d / total.Value : 0;
-                        events.Report(new(app.Id, $"Đang tải · {received / 1048576d:0.0} MB", percent));
-                        clock.Restart();
-                    }
-                    if (total.HasValue && received != total.Value) throw new IOException("File tải chưa đầy đủ.");
-                }
+                await FetchAsync(app, path, events, log, token);
                 await VerifyFileAsync(path, app.Sha256, token);
                 return path;
             }
@@ -271,17 +247,192 @@ public sealed class DeploymentService
             {
                 throw new OperationCanceledException(token);
             }
-            catch (Exception ex) when (attempt < 3)
+            catch (InvalidDataException ex) when (attempt < 2)
             {
-                log.Report($"{app.Name}: tải lần {attempt} lỗi ({ex.Message}); thử lại cùng URL.");
-                await Task.Delay(TimeSpan.FromSeconds(attempt * 2), token);
-            }
-            catch (OperationCanceledException ex)
-            {
-                throw new TimeoutException("Download timed out after three attempts.", ex);
+                log.Report($"{app.Name}: file tải về không hợp lệ ({ex.Message}); tải lại từ đầu.");
             }
         }
-        throw new IOException("Không tải được bộ cài.");
+    }
+
+    // The first request asks for "bytes=0-". A server without range support answers 200 with the whole
+    // file, which is then read as before; a 206 gives the size, so the rest can be split and resumed.
+    private async Task FetchAsync(AppDefinition app, string path, IProgress<DeploymentEvent> events, IProgress<string> log, CancellationToken token)
+    {
+        var progress = new DownloadProgress(app.Id, events);
+        HttpResponseMessage? first = null;
+        try
+        {
+            first = await GetRangeAsync(app.Url, 0, null, token);
+            var total = first.StatusCode == System.Net.HttpStatusCode.PartialContent ? TotalLength(first, 0) : null;
+            if (total == null)
+            {
+                await FetchWholeAsync(app, path, first, progress, log, token);
+                first = null;
+                return;
+            }
+            progress.Total = total.Value;
+            using (var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.ReadWrite)) file.SetLength(total.Value);
+            var count = total.Value >= SegmentThreshold ? SegmentCount : 1;
+            var size = (total.Value + count - 1) / count;
+            using var group = CancellationTokenSource.CreateLinkedTokenSource(token);
+            var segments = new Task[count];
+            Exception? cause = null;
+            for (var i = 0; i < count; i++)
+            {
+                var start = i * size;
+                var end = Math.Min(total.Value, start + size) - 1;
+                var response = i == 0 ? first : null;
+                segments[i] = Task.Run(async () =>
+                {
+                    try { await FetchSegmentAsync(app, path, start, end, response, progress, log, group.Token); }
+                    catch (Exception ex) { Interlocked.CompareExchange(ref cause, ex, null); group.Cancel(); throw; }
+                });
+            }
+            first = null;
+            if (count > 1) log.Report($"{app.Name}: tải {count} luồng song song ({total.Value / 1048576d:0.0} MB).");
+            // A failed segment cancels its siblings; report the failure itself, not their cancellation.
+            try { await Task.WhenAll(segments); }
+            catch when (cause != null && !token.IsCancellationRequested) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(cause).Throw(); }
+        }
+        finally { first?.Dispose(); }
+    }
+
+    // One byte range; a dropped connection resumes from the last byte written. It gives up after three
+    // attempts in a row that added nothing.
+    private async Task FetchSegmentAsync(AppDefinition app, string path, long start, long end, HttpResponseMessage? first,
+        DownloadProgress progress, IProgress<string> log, CancellationToken token)
+    {
+        var position = start;
+        var idle = 0;
+        while (position <= end)
+        {
+            var before = position;
+            try
+            {
+                using var response = first ?? await GetRangeAsync(app.Url, position, end, token);
+                first = null;
+                if (response.StatusCode != System.Net.HttpStatusCode.PartialContent || response.Content.Headers.ContentRange?.From != position)
+                    throw new IOException("Máy chủ không tải tiếp được từ vị trí đã dừng.");
+                using var file = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite, 81920, true);
+                file.Position = position;
+                await CopyAsync(response, file, end - position + 1, read => { position += read; progress.Add(read); }, token);
+                if (position <= end) throw new IOException("Kết nối đóng trước khi tải xong.");
+            }
+            catch (Exception ex) when (!token.IsCancellationRequested && position <= end)
+            {
+                first?.Dispose(); first = null;
+                idle = position > before ? 1 : idle + 1;
+                if (idle >= 3) throw;
+                log.Report($"{app.Name}: tải bị gián đoạn ({ex.Message}); tải tiếp từ {position / 1048576d:0.0} MB.");
+                await Task.Delay(TimeSpan.FromSeconds(idle * 2), token);
+            }
+        }
+    }
+
+    // A server without range support: each retry starts the whole file again.
+    private async Task FetchWholeAsync(AppDefinition app, string path, HttpResponseMessage? first, DownloadProgress progress, IProgress<string> log, CancellationToken token)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                using var response = first ?? await GetRangeAsync(app.Url, null, null, token);
+                first = null;
+                progress.Reset(response.Content.Headers.ContentLength);
+                long received = 0;
+                using (var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
+                    await CopyAsync(response, file, null, read => { received += read; progress.Add(read); }, token);
+                var length = response.Content.Headers.ContentLength;
+                if (length.HasValue && received != length.Value) throw new IOException("File tải chưa đầy đủ.");
+                return;
+            }
+            catch (Exception ex) when (!token.IsCancellationRequested && attempt < 3)
+            {
+                first?.Dispose(); first = null;
+                log.Report($"{app.Name}: tải lần {attempt} lỗi ({ex.Message}); máy chủ không hỗ trợ tải tiếp, thử lại từ đầu.");
+                await Task.Delay(TimeSpan.FromSeconds(attempt * 2), token);
+            }
+        }
+    }
+
+    // from == null sends no Range header. Headers that never arrive count as a stall.
+    private async Task<HttpResponseMessage> GetRangeAsync(string url, long? from, long? to, CancellationToken token)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        if (from.HasValue) request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(from, to);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(StallTimeout);
+        HttpResponseMessage response;
+        try { response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token); }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested) { throw new TimeoutException("Máy chủ không phản hồi trong 90 giây."); }
+        try
+        {
+            response.EnsureSuccessStatusCode();
+            if (response.RequestMessage?.RequestUri?.Scheme != "https") throw new InvalidDataException("Chuyển hướng tải không an toàn.");
+            return response;
+        }
+        catch { response.Dispose(); throw; }
+    }
+
+    private static long? TotalLength(HttpResponseMessage response, long from)
+    {
+        var range = response.Content.Headers.ContentRange;
+        return range?.Length is long length && range.From == from && length > 0 ? length : null;
+    }
+
+    // Copies until limit bytes (or the end of the body when limit is null). Each read must make
+    // progress within the stall timeout.
+    private static async Task CopyAsync(HttpResponseMessage response, FileStream output, long? limit, Action<int> wrote, CancellationToken token)
+    {
+        using var input = await response.Content.ReadAsStreamAsync();
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        using (deadline.Token.Register(() =>
+        {
+            // Framework response streams do not consistently observe cancellation while a read is stalled.
+            try { input.Dispose(); } catch { }
+            try { response.Dispose(); } catch { }
+        }))
+        {
+            var buffer = new byte[81920];
+            var remaining = limit;
+            try
+            {
+                while (remaining is not <= 0)
+                {
+                    deadline.CancelAfter(StallTimeout);
+                    var want = remaining.HasValue ? (int)Math.Min(buffer.Length, remaining.Value) : buffer.Length;
+                    var size = await input.ReadAsync(buffer, 0, want, deadline.Token);
+                    if (size == 0) break;
+                    await output.WriteAsync(buffer, 0, size, deadline.Token);
+                    if (remaining.HasValue) remaining -= size;
+                    wrote(size);
+                }
+            }
+            catch (Exception) when (deadline.IsCancellationRequested && !token.IsCancellationRequested)
+            {
+                throw new TimeoutException("Không nhận được dữ liệu trong 90 giây.");
+            }
+        }
+    }
+
+    // Shared by the segments of one file; reports at most every 250 ms.
+    private sealed class DownloadProgress(string id, IProgress<DeploymentEvent> events)
+    {
+        private readonly Stopwatch clock = Stopwatch.StartNew();
+        private long received;
+        public long? Total { get; set; }
+        public void Reset(long? total) { Interlocked.Exchange(ref received, 0); Total = total; }
+        public void Add(int count)
+        {
+            var now = Interlocked.Add(ref received, count);
+            lock (clock)
+            {
+                if (clock.ElapsedMilliseconds < 250) return;
+                clock.Restart();
+            }
+            var percent = Total > 0 ? now * 100d / Total.Value : 0;
+            events.Report(new(id, $"Đang tải · {now / 1048576d:0.0} MB", percent));
+        }
     }
 
     public static async Task VerifyFileAsync(string path, string expectedHash, CancellationToken token)

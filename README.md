@@ -40,7 +40,7 @@ Chính sách Execution Policy không chặn lệnh này, vì script chạy từ 
 
 ## Chức năng
 
-- **INSTALL SOFTWARE:** một nút cài toàn bộ catalog ứng dụng cùng các thiết lập Windows. Drop list chọn bộ văn phòng: Microsoft Office, WPS, OnlyOffice, Libre Office hoặc Null (không cài). Mỗi app có nút tải xuống để cài riêng. Chọn WPS, OnlyOffice hoặc Libre Office thì Microsoft Office đang có trên máy được gỡ trước. Debloatware Windows (Win11Debloat ở chế độ mặc định, có điểm khôi phục) chạy cùng lượt như một ứng dụng. Smart Skip bỏ qua phần mềm đã có. Thiết lập Windows gồm SMB, chia ổ đĩa, Execution Policy và các tối ưu khác.
+- **INSTALL SOFTWARE:** một nút cài toàn bộ catalog ứng dụng cùng các thiết lập Windows. Drop list chọn bộ văn phòng: Microsoft Office, WPS, OnlyOffice, Libre Office hoặc Chọn Office (mặc định, không cài). Mỗi app có nút tải xuống để cài riêng. Chọn WPS, OnlyOffice hoặc Libre Office thì Microsoft Office đang có trên máy được gỡ trước. Debloatware Windows (Win11Debloat ở chế độ mặc định, có điểm khôi phục) chạy cùng lượt như một ứng dụng. Smart Skip bỏ qua phần mềm đã có. Thiết lập Windows gồm SMB, chia ổ đĩa, Execution Policy và các tối ưu khác.
 - **INFORMATION:** Windows và bản quyền, tên máy, model, serial, CPU, RAM, GPU, ổ đĩa, màn hình. Nút Driver sao chép serial và mở trang hỗ trợ chính thức của hãng.
 - **EXTEND:** Môi trường C++ (VS Code, MSYS2, MinGW-w64), hỏi xác nhận trước khi chạy; Share LAN mở trong cửa sổ PowerShell riêng.
 

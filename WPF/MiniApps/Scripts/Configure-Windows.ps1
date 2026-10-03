@@ -1,8 +1,7 @@
-param([Parameter(Mandatory)][ValidateSet('Desktop','Timezone','Dns','FastStartup','Power','PasswordExpiry','Winget','Debloat')][string]$Option)
+param([Parameter(Mandatory)][ValidateSet('Desktop','Timezone','Dns','FastStartup','Power','PasswordExpiry','Debloat')][string]$Option)
 $ErrorActionPreference = 'Stop'
 try {
     switch ($Option) {
-        'Winget' { & (Join-Path $PSScriptRoot 'Update-Winget.ps1'); if (-not $?) { throw 'WinGet update failed.' } }
         'Desktop' {
             $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel'
             New-Item -Path $key -Force | Out-Null

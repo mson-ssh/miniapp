@@ -11,8 +11,6 @@ public static class WindowsCompatibility
 
     public static int MinimumBuildFor(WindowsSettingDefinition setting) => setting.Action switch
     {
-        // WinGet/App Installer officially supports Windows 10 version 1809 and later.
-        "Winget" => 17763,
         // The remaining built-ins use Windows PowerShell, registry, powercfg, networking
         // and download APIs already available at the MiniApps Windows baseline.
         "Desktop" or "Timezone" or "Dns" or "FastStartup" or "Power" or

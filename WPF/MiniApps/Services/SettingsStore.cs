@@ -23,6 +23,8 @@ public sealed class SettingsStore(string? directory = null)
         if (!File.Exists(path)) return WindowsSettingsCatalog.Defaults();
         var saved = Read<WindowsSettingDefinition>(path, WindowsSchemaVersion, legacyVersion: 1);
         var settings = saved.Items;
+        // Winget (update) was removed from the built-ins on 2026-10-03; drop it from older configs too.
+        settings.RemoveAll(setting => setting != null && setting.Action.Equals("Winget", StringComparison.OrdinalIgnoreCase));
         if (saved.SchemaVersion < 3)
             settings.RemoveAll(setting => setting != null &&
                 (setting.Id.Equals("Debloat", StringComparison.OrdinalIgnoreCase) ||

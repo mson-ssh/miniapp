@@ -76,10 +76,11 @@ public static class Catalog
         // OnlyOffice's URL always serves the latest release, so it cannot carry a hash.
         new() { Id = "onlyoffice", Name = "OnlyOffice", Suite = "OnlyOffice", Arguments = "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES",
             Url = "https://download.onlyoffice.com/install/desktop/editors/windows/distrib/onlyoffice/DesktopEditors_x64.exe" },
-        // The Document Foundation archive keeps every build permanently; 26.2.6.3 is the 26.2.6 release.
+        // TDF mirror (the archive server ran ~1 MB/s). SHA-256 matches TDF's published hash. Mirrors drop a
+        // version from stable/ once it is superseded: move to the next release or to downloadarchive then.
         new() { Id = "libreoffice", Name = "LibreOffice", Suite = "LibreOffice", Arguments = "/qn /norestart",
-            Url = "https://downloadarchive.documentfoundation.org/libreoffice/old/26.2.6.3/win/x86_64/LibreOffice_26.2.6.3_Win_x86-64.msi",
-            Sha256 = "f9877032fd908beb9c0ddf06df4af5c2e85f419c42e14876c4cce5aae5fb2660" },
+            Url = "https://mirror.freedif.org/TDF/libreoffice/stable/26.8.0/win/x86_64/LibreOffice_26.8.0_Win_x86-64.msi",
+            Sha256 = "4aa6c6e1895f4055104effcb556bd3362d20c6ad707c149543304f395ef9db95" },
         Make("vc64", "Visual C++ x64", "VC_redist.x64.exe", "/install /quiet /norestart"),
         Make("vc86", "Visual C++ x86", "VC_redist.x86.exe", "/install /quiet /norestart")
     ];
