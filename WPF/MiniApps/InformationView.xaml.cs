@@ -1,7 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Diagnostics;
-using System.Windows.Threading;
 using MiniApps.Services;
 
 namespace MiniApps;
@@ -13,50 +12,18 @@ public partial class InformationView : UserControl, IDisposable
     private InformationReport? report;
     private bool loading;
     private readonly bool preview;
-    // The read reports no progress of its own, so the percentage is paced by time: about 90%
-    // after 3.5 s (a typical read here), then slowing, and holding at 99% until the data arrives.
-    private readonly DispatcherTimer loadingTimer = new() { Interval = TimeSpan.FromMilliseconds(50) };
-    private double loadingProgress;
-    internal int LoadingPercentShown { get; private set; }
     internal InformationView(Func<CancellationToken, Task<InformationReport>>? read = null, bool preview = false)
     {
         InitializeComponent();
-        DeviceMaker.Visibility = Visibility.Collapsed;
-        RightSections.Visibility = Visibility.Collapsed;
-        Grid.SetColumnSpan(LeftSections, 3);
         this.read = read ?? InformationService.ReadAsync;
         this.preview = preview;
         IsVisibleChanged += async (_, _) => { if (IsVisible && report == null) await ReloadAsync(); };
-        loadingTimer.Tick += (_, _) => SetLoadingProgress(loadingProgress + (99 - loadingProgress) * 0.034);
-    }
-    private void SetLoadingProgress(double value)
-    {
-        loadingProgress = Math.Min(99, value);
-        LoadingPercentShown = Math.Min(99, Math.Max(1, (int)Math.Ceiling(loadingProgress)));
-        LoadingPercent.Text = LoadingPercentShown + "%";
-        LoadingProgress.Value = LoadingPercentShown;
-    }
-    private void ShowLoading(bool show)
-    {
-        if (show)
-        {
-            SetLoadingProgress(1);
-            InformationContent.Visibility = Visibility.Collapsed;
-            LoadingPanel.Visibility = Visibility.Visible;
-            loadingTimer.Start();
-            return;
-        }
-        loadingTimer.Stop();
-        LoadingPanel.Visibility = Visibility.Collapsed;
-        // A failed refresh keeps showing the data read earlier.
-        InformationContent.Visibility = report != null ? Visibility.Visible : Visibility.Collapsed;
     }
     internal async Task ReloadAsync()
     {
         if (loading || lifetime.IsCancellationRequested) return;
         loading = true; RefreshButton.IsEnabled = false; DriverButton.IsEnabled = false;
-        ShowLoading(true);
-        StatusText.Text = "";
+        StatusText.Text = "Đang đọc thông tin hệ thống…";
         try
         {
             var result = await read(lifetime.Token);
@@ -65,10 +32,11 @@ public partial class InformationView : UserControl, IDisposable
             StatusText.Text = "Đã cập nhật · " + DateTime.Now.ToString("HH:mm:ss") + "  ·  Chọn văn bản để sao chép từng thông số.";
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        // A failed refresh keeps showing the data read earlier.
         catch (Exception ex) { StatusText.Text = "Không đọc được thông tin: " + ex.Message; }
         finally
         {
-            loading = false; RefreshButton.IsEnabled = true; ShowLoading(false);
+            loading = false; RefreshButton.IsEnabled = true;
             DriverButton.IsEnabled = report != null;
         }
     }
@@ -76,15 +44,7 @@ public partial class InformationView : UserControl, IDisposable
     {
         report = value;
         InformationContent.DataContext = value;
-        // Presentation only: preserve the collector and manufacturer used by Driver.
-        var os = value.Section("Hệ điều hành");
-        DeviceHeading.Text = "HOST · " + (os?.Facts.FirstOrDefault(fact => fact.Label == "Tên máy")?.Value ?? "—");
-        LeftSections.ItemsSource = os == null ? Array.Empty<InformationSection>() : new[]
-        {
-            new InformationSection(os.Title, os.Facts.Where(fact => fact.Label != "Tên máy").ToArray(), Array.Empty<InformationItem>())
-        };
-        RightSections.ItemsSource = Array.Empty<InformationSection>();
-        CopyButton.IsEnabled = true;
+        InformationContent.Visibility = Visibility.Visible;
     }
     private async void RefreshInformation(object sender, RoutedEventArgs e) => await ReloadAsync();
     private void OpenDriver(object sender, RoutedEventArgs e)
@@ -109,11 +69,5 @@ public partial class InformationView : UserControl, IDisposable
         try { open(url); }
         catch (Exception ex) { throw new InvalidOperationException("Đã sao chép Serial nhưng không mở được trang hỗ trợ: " + ex.Message, ex); }
     }
-    private void CopyInformation(object sender, RoutedEventArgs e)
-    {
-        if (report == null) return;
-        try { Clipboard.SetText(report.ToText()); StatusText.Text = "Đã sao chép thông tin."; }
-        catch (Exception ex) { StatusText.Text = "Không sao chép được: " + ex.Message; }
-    }
-    public void Dispose() { loadingTimer.Stop(); lifetime.Cancel(); }
+    public void Dispose() => lifetime.Cancel();
 }

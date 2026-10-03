@@ -8,14 +8,20 @@ namespace MiniApps;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel model;
+    // The scale the window and its content are shown at (see WindowScale).
+    public double UiScale { get; }
     public MainWindow(MainViewModel model)
     {
+        UiScale = WindowScale.Current = WindowScale.For(SystemParameters.WorkArea.Width, SystemParameters.WorkArea.Height);
         InitializeComponent(); this.model = model; DataContext = model;
+        ((FrameworkElement)Content).LayoutTransform = new System.Windows.Media.ScaleTransform(UiScale, UiScale);
+        Width = WindowScale.DesignWidth * UiScale; Height = WindowScale.DesignHeight * UiScale;
+        MinWidth = WindowScale.DesignMinWidth * UiScale; MinHeight = WindowScale.DesignMinHeight * UiScale;
         // Keep the consequential Office-removal notice, omit the generic instructions.
         InstallHint.Text = "WPS / OnlyOffice / LibreOffice sẽ gỡ Microsoft Office.";
         InstallHint.Margin = new Thickness(0, 8, 0, 0);
         var information = this.information = new InformationView(model.IsPreview
-            ? _ => Task.FromResult(Services.InformationService.Parse(Services.InformationService.PreviewJson))
+            ? _ => Task.FromResult(Services.InformationService.Preview)
             : null, preview: model.IsPreview) { Visibility = model.Page == 1 ? Visibility.Visible : Visibility.Collapsed };
         PageHost.Children.Add(information);
         PropertyChangedEventHandler onPageChanged = (_, e) =>

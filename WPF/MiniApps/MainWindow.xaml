@@ -1,5 +1,5 @@
 <Window x:Class="MiniApps.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:MiniApps"
-        Title="MiniApps" Width="1120" Height="810" MinWidth="940" MinHeight="660" WindowStartupLocation="CenterScreen"
+        Title="MiniApps" Width="1000" Height="720" MinWidth="860" MinHeight="600" WindowStartupLocation="CenterScreen"
         Background="#F3F4F6" Foreground="{StaticResource Ink}" FontFamily="Segoe UI" FontSize="13" UseLayoutRounding="True" Closing="OnClosing">
   <Grid Background="#F3F4F6">
     <Grid.ColumnDefinitions><ColumnDefinition Width="202" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>

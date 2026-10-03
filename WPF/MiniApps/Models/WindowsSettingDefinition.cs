@@ -40,7 +40,7 @@ public static class WindowsSettingsCatalog
         Make("FastStartup", "Tắt Fast Startup", "Tắt cơ chế khởi động nhanh của Windows."),
         Make("Power", "Không tự tắt màn hình / sleep", "Áp dụng khi dùng nguồn điện và pin; tăng tiêu thụ pin."),
         Make("PasswordExpiry", "Mật khẩu không hết hạn", "Thay đổi chính sách hết hạn mật khẩu cục bộ."),
-        Make("InfoExe", "Info.exe", "Tải info.exe về Desktop; không tự động mở ứng dụng."),
+        Make("InfoExe", "Info.exe", "Tải info.exe về Desktop rồi mở ứng dụng."),
         Make("Smb", "SMB chia sẻ mạng", "Vào được NAS, máy in, thư mục share (kể cả không mật khẩu và thiết bị cũ, bật SMB1 client); bật dò tìm mạng và chia sẻ file trên mạng Private. Có thể cần khởi động lại."),
         Make("Disk", "Chia ổ đĩa", "Chia ổ hệ thống theo dung lượng: 256 GB thêm D: 50 GB; 512 GB thêm D: 200 GB; 1 TB thêm D: 400 GB và E: 200 GB. Bỏ qua ổ trên 1100 GB hoặc máy đã có D:/E:. Tắt BitLocker và Hibernate trên C: trước khi chia."),
         Make("ExecutionPolicy", "Execution Policy: Bypass", "Cho phép chạy mọi script PowerShell trên máy (phạm vi LocalMachine), không chặn hay hỏi xác nhận."),
@@ -103,6 +103,11 @@ public static class WindowsSettingsCatalog
                 Copy-Item -LiteralPath $staged -Destination $destination -Force -ErrorAction Stop
             }
             finally { Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue }
+            # Open it without waiting. TEMP/TMP point at this run's work folder, which is deleted afterwards.
+            $userTemp = [Environment]::GetEnvironmentVariable('TEMP', 'User')
+            if ($userTemp) { $env:TEMP = $env:TMP = [Environment]::ExpandEnvironmentVariables($userTemp) }
+            try { Start-Process -FilePath $destination -WorkingDirectory $desktop -ErrorAction Stop }
+            catch { Write-Output "Đã tải info.exe về Desktop nhưng chưa mở được: $($_.Exception.Message)" }
             """,
         _ => ""
     };

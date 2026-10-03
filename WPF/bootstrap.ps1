@@ -205,7 +205,7 @@ function Start-MiniApps {
             foreach ($candidate in (Get-MiniAppsTargetOrder -Target $target)) {
                 $asset = Select-MiniAppsAsset -Manifest $manifest -Target $candidate -Architecture $rid
                 $zip = Join-Path $session "package-$candidate.zip"
-                Write-Host "Downloading MiniApps $candidate..." -ForegroundColor Cyan
+                Write-Host 'Loading...' -ForegroundColor Cyan
                 Invoke-WebRequest -Uri ([string]$asset.url) -OutFile $zip -UseBasicParsing -TimeoutSec 600
                 if ((Get-Item -LiteralPath $zip).Length -ne [long]$asset.size) { throw 'Package size does not match the release manifest.' }
                 $candidateExe = Expand-Package $zip ([string]$asset.sha256) "app-$candidate"

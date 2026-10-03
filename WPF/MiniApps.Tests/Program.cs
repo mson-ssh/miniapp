@@ -14,10 +14,9 @@ if (args.Contains("--information-audit"))
 {
     var auditClock = System.Diagnostics.Stopwatch.StartNew();
     var report = await InformationService.ReadAsync(CancellationToken.None);
-    if (report.Section("Hệ điều hành")!.Facts[0].Value == "—" ||
-        report.Section("Hệ điều hành")!.Facts[2].Value == "—")
-        throw new Exception("Minimal Information collection failed.");
-    Console.WriteLine($"PASS embedded minimal Information reader: {auditClock.ElapsedMilliseconds} ms; device values omitted.");
+    if (report.Windows == "—" || report.Host == "—" || !report.Windows.StartsWith("Windows", StringComparison.Ordinal))
+        throw new Exception("Information collection failed.");
+    Console.WriteLine($"PASS direct Information reader: {auditClock.ElapsedMilliseconds} ms; maker/serial {(report.Maker == "—" || report.Serial == "—" ? "missing" : "read")}, activation {(report.Activated ? "confirmed" : "unconfirmed")}; device values omitted.");
     return;
 }
 void Check(string name, Action action) { action(); Console.WriteLine("PASS " + name); passed++; }
@@ -237,16 +236,25 @@ try
         WaitWithTimeout(run, TimeSpan.FromSeconds(60)).GetAwaiter().GetResult();
         Assert(run.Result == 7 && lines.Contains("Tiếng Việt có dấu") && lines.Contains("lỗi thử") && lines.Contains("sau ReadKey"));
     });
-    Check("Information embeds only the minimal collector", () => {
-        using var stream = typeof(InformationService).Assembly.GetManifestResourceStream("MiniApps.Information.ps1")!;
-        using var reader = new StreamReader(stream);
-        var source = reader.ReadToEnd();
-        Assert(source.Contains("Win32_BIOS") && source.Contains("SoftwareLicensingProduct"));
-        foreach (var forbidden in new[] { "Get-SystemData", "Add-Type", "Win32_Processor", "Win32_PhysicalMemory", "Win32_VideoController", "Get-Disk", "Get-PhysicalDisk", "slmgr", "nvidia-smi" })
-            Assert(!source.Contains(forbidden));
+    Check("Information reads without PowerShell or WMI", () => {
+        Assert(typeof(InformationService).Assembly.GetManifestResourceNames().All(name => !name.Contains("Information")));
+        Assert(InformationService.WindowsName("Windows 10 Pro", 26100) == "Windows 11 Pro" && InformationService.WindowsName("Windows 10 Pro", 19045) == "Windows 10 Pro");
+        // RawSMBIOSData header, a BIOS structure (type 0) with one string, then System Information (type 1).
+        byte[] Ascii(string text) => System.Text.Encoding.ASCII.GetBytes(text + "\0");
+        var system = new List<byte> { 1, 8, 1, 0, 1, 2, 0, 3 };
+        system.AddRange(Ascii("Dell Inc.")); system.AddRange(Ascii("Latitude")); system.AddRange(Ascii(" ABC123 ")); system.Add(0);
+        var table = new List<byte> { 0, 3, 4, 0, 0, 0, 0, 0, 0, 4, 0, 0 };
+        table.AddRange(Ascii("BIOS vendor")); table.Add(0); table.AddRange(system);
+        Assert(InformationService.ParseSmbiosSystem(table.ToArray()) == ("Dell Inc.", "ABC123"));
+        // A structure without strings ends in two NULs; a truncated table yields nothing.
+        var bare = new List<byte> { 0, 3, 4, 0, 0, 0, 0, 0, 2, 4, 0, 0, 0, 0 }; bare.AddRange(system);
+        Assert(InformationService.ParseSmbiosSystem(bare.ToArray()) == ("Dell Inc.", "ABC123"));
+        Assert(InformationService.ParseSmbiosSystem(bare.Take(20).ToArray()) == ("", ""));
+        var read = InformationService.Read();
+        Assert(read.Host == Environment.MachineName && read.Windows.StartsWith("Windows", StringComparison.Ordinal));
     });
     Check("Information Driver copies serial before opening official support", () => {
-        var serial = InformationService.Parse("""{"OS":"Windows","Serial":"ABC123","Manufacturer":"Dell Inc."}""");
+        var serial = new InformationReport("HOST", "Windows", false, "Dell Inc.", "ABC123", "—");
         var steps = new List<string>();
         MiniApps.InformationView.OpenDriverSupport(serial.Serial, serial.DriverUrl, value => steps.Add("copy:" + value), url => steps.Add("open:" + url));
         Assert(steps.Count == 2 && steps[0] == "copy:ABC123" && steps[1].StartsWith("open:https://www.dell.com/"));
@@ -304,6 +312,15 @@ try
         WaitWithTimeout(operation, TimeSpan.FromSeconds(2)).GetAwaiter().GetResult();
         Assert(clock.Elapsed < TimeSpan.FromSeconds(2) && outcomes.Last().Status == "Đã hủy" && outcomes.Last().Finished && !outcomes.Last().Failed);
     });
+    Check("Window scale is 85% on Full HD and follows the screen within its limits", () => {
+        Assert(MiniApps.WindowScale.For(1920, 1040) == 0.85);
+        Assert(MiniApps.WindowScale.For(2560, 1400) > 1.1 && MiniApps.WindowScale.For(2560, 1400) < 1.2);
+        Assert(MiniApps.WindowScale.For(7680, 4280) == MiniApps.WindowScale.MaxScale);
+        // 1366x768 laptop: MinScale. A 1024x600 screen is too short for that, so the window still fits.
+        Assert(MiniApps.WindowScale.For(1366, 728) == MiniApps.WindowScale.MinScale);
+        var small = MiniApps.WindowScale.For(1024, 560);
+        Assert(small < MiniApps.WindowScale.MinScale && MiniApps.WindowScale.DesignHeight * small <= 560 * MiniApps.WindowScale.ScreenFraction + 0.5);
+    });
     Check("Install includes all remaining Windows settings without selection state", () => { var vm = new MainViewModel(true); Assert(vm.Apps.Count == 10 && vm.WindowsOptions.Count == 11 && vm.WindowsOptions.All(o => !MainViewModel.IsDebloat(o.Definition)) && typeof(WindowsOption).GetProperty("Selected") == null && vm.SelectionText == "11 ứng dụng · 10 thiết lập Windows"); });
     Check("Disk setting keeps the CLI partitioning rules", () => {
         var setting = WindowsSettingsCatalog.Defaults().Single(s => s.Id == "Disk");
@@ -330,11 +347,16 @@ try
             setting.Script.Contains("-Scope LocalMachine") && setting.Script.Contains("-Force"));
         Assert(WindowsCompatibility.Supports(setting, WindowsCompatibility.MinimumWindowsBuild));
     });
-    Check("Info.exe setting downloads a validated executable to Desktop", () => {
+    Check("Info.exe setting downloads a validated executable to Desktop, then opens it", () => {
         var info = WindowsSettingsCatalog.Defaults().Single(s => s.Id == "InfoExe");
         Assert(info.Name == "Info.exe" && info.Script.Contains("/info.exe") && info.Script.Contains("GetFolderPath('Desktop')"));
         Assert(info.Script.Contains("0x4D") && info.Script.Contains("0x5A") && info.Script.Contains("Copy-Item"));
-        Assert(!info.Script.Contains("Start-Process"));
+        // Opened only after it is copied to Desktop, without waiting, and outside the run's work folder.
+        var open = info.Script.IndexOf("Start-Process -FilePath $destination", StringComparison.Ordinal);
+        Assert(open > info.Script.IndexOf("Copy-Item", StringComparison.Ordinal) && !info.Script.Contains("-Wait") &&
+            info.Script.IndexOf("ExpandEnvironmentVariables", StringComparison.Ordinal) is var temp && temp > 0 && temp < open);
+        var packaged = new SettingsStore(Path.GetFullPath("ReleaseConfig")).LoadWindows(required: true).Single(s => s.Id == "InfoExe");
+        Assert(packaged.Script.Replace("\r\n", "\n") == info.Script.Replace("\r\n", "\n") && packaged.Description == info.Description);
     });
     Check("Driver brands resolve to official HTTPS support pages", () => {
         var dell = DeviceInfoService.Resolve("PC-01", "Dell Inc.", "Latitude 5450", "ABC123");
@@ -983,73 +1005,47 @@ var renderThread = new Thread(() =>
         if (publicVm.Page != 1 || ((System.Windows.Controls.ListBoxItem)navigation.Items[1]).Content?.ToString() != "INFORMATION")
             throw new Exception("Information must replace Driver.");
         var information = ((System.Windows.Controls.Grid)publicWindow.FindName("PageHost")).Children.OfType<MiniApps.InformationView>().Single();
-        var leftSections = (System.Windows.Controls.ItemsControl)information.FindName("LeftSections");
-        var rightSections = (System.Windows.Controls.ItemsControl)information.FindName("RightSections");
         if (Math.Abs(publicWindow.Width - widthBeforeInformation) > 1 ||
             Math.Abs(publicWindow.Height - heightBeforeInformation) > 1 ||
-            publicWindow.MinWidth != 940 || publicWindow.MinHeight != 660 ||
+            Math.Abs(publicWindow.MinWidth - MiniApps.WindowScale.DesignMinWidth * publicWindow.UiScale) > 0.5 || Math.Abs(publicWindow.MinHeight - MiniApps.WindowScale.DesignMinHeight * publicWindow.UiScale) > 0.5 ||
             MiniApps.InstallLayout.DescriptionVisibility != System.Windows.Visibility.Collapsed ||
             ((System.Windows.Controls.TextBlock)publicWindow.FindName("InstallHint")).Text != "WPS / OnlyOffice / LibreOffice sẽ gỡ Microsoft Office.")
             throw new Exception("Information must retain the shared window size and concise installation notice.");
-        if (!information.IsVisible || leftSections.Items.Count != 1 || rightSections.Items.Count != 0 ||
-            rightSections.Visibility != System.Windows.Visibility.Collapsed ||
-            ((System.Windows.Controls.TextBox)information.FindName("DeviceHeading")).Text != "HOST · MINI-PC" ||
-            ((System.Windows.FrameworkElement)information.FindName("DeviceMaker")).Visibility != System.Windows.Visibility.Collapsed)
+        string InfoText(MiniApps.InformationView view, string name) => ((System.Windows.Controls.TextBox)view.FindName(name)).Text;
+        if (!information.IsVisible || InfoText(information, "DeviceHeading") != "HOST · MINI-PC" ||
+            InfoText(information, "WindowsValue") != "Windows 11 Pro" || InfoText(information, "ActivationValue") != "Đã kích hoạt")
             throw new Exception("Information must show only HOST, Serial, Driver and the operating system.");
         Console.WriteLine("PASS Information navigation and embedded data view");
         var heldRead = new TaskCompletionSource<InformationReport>();
         var slowInformation = new MiniApps.InformationView(_ => heldRead.Task);
         var slowWindow = new System.Windows.Window { Content = slowInformation, Width = 1000, Height = 700, ShowInTaskbar = false, Left = -20000, Top = -20000 };
         slowWindow.Show();
-        var loadingPanel = (System.Windows.FrameworkElement)slowInformation.FindName("LoadingPanel");
-        var seen = new List<int>();
-        void PumpFor(TimeSpan span, Func<bool>? until = null)
+        void PumpUntil(Func<bool> done)
         {
             var frame = new System.Windows.Threading.DispatcherFrame();
-            var end = DateTime.UtcNow + span;
+            var end = DateTime.UtcNow.AddSeconds(3);
             var tick = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
-            tick.Tick += (_, _) => { seen.Add(slowInformation.LoadingPercentShown); if (DateTime.UtcNow >= end || (until?.Invoke() ?? false)) frame.Continue = false; };
+            tick.Tick += (_, _) => { if (DateTime.UtcNow >= end || done()) frame.Continue = false; };
             tick.Start(); System.Windows.Threading.Dispatcher.PushFrame(frame); tick.Stop();
         }
-        PumpFor(TimeSpan.FromSeconds(1.5));
         var loadedContent = (System.Windows.FrameworkElement)slowInformation.FindName("InformationContent");
-        if (!loadingPanel.IsVisible || loadedContent.IsVisible || slowInformation.LoadingPercentShown < 20 || slowInformation.LoadingPercentShown > 99 ||
-            seen.Zip(seen.Skip(1), (a, b) => b >= a).Contains(false) || loadingPanel.ActualWidth <= 0)
-            throw new Exception($"The Information loader must sit alone, counting up: shown={slowInformation.LoadingPercentShown}, visible={loadingPanel.IsVisible}.");
-        var loaderView = (System.Windows.FrameworkElement)slowWindow.Content;
-        var loaderBitmap = new System.Windows.Media.Imaging.RenderTargetBitmap((int)loaderView.ActualWidth, (int)loaderView.ActualHeight, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
-        loaderBitmap.Render(loaderView);
-        var loaderEncoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
-        loaderEncoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(loaderBitmap));
-        using (var output = File.Create(Path.Combine(targetDir, "information-loading.png"))) loaderEncoder.Save(output);
-        PumpFor(TimeSpan.FromSeconds(8));
-        if (slowInformation.LoadingPercentShown != 99 || seen.Max() > 99)
-            throw new Exception($"A slow read must hold at 99%, got {slowInformation.LoadingPercentShown} (max {seen.Max()}).");
-        heldRead.SetResult(InformationService.Parse("{\"OS\":\"Windows · mô phỏng\",\"CPU\":\"CPU · mô phỏng\",\"Serial\":\"DEMO-1\"}"));
-        PumpFor(TimeSpan.FromSeconds(3), () => !loadingPanel.IsVisible);
-        if (loadingPanel.IsVisible || !loadedContent.IsVisible)
-            throw new Exception("The data must replace the loader once the read completes.");
+        var slowStatus = (System.Windows.Controls.TextBlock)slowInformation.FindName("StatusText");
+        PumpUntil(() => slowStatus.Text.StartsWith("Đang đọc", StringComparison.Ordinal));
+        if (loadedContent.IsVisible || !slowStatus.Text.StartsWith("Đang đọc", StringComparison.Ordinal))
+            throw new Exception("While reading, Information shows only the reading status.");
+        // An unconfirmed licence is flagged in amber.
+        heldRead.SetResult(new InformationReport("HOST-1", "Windows 10 Pro", false, "—", "DEMO-1", "—"));
+        PumpUntil(() => loadedContent.IsVisible);
+        var activation = (System.Windows.Controls.TextBox)slowInformation.FindName("ActivationValue");
+        if (!loadedContent.IsVisible || activation.Text != "Chưa xác nhận kích hoạt" ||
+            ((System.Windows.Media.SolidColorBrush)activation.Foreground).Color != System.Windows.Media.Color.FromRgb(0xB7, 0x79, 0x1F))
+            throw new Exception("The data must appear once the read completes, with an unconfirmed licence flagged.");
         slowWindow.Close(); slowInformation.Dispose();
-        Console.WriteLine("PASS Information loader is centred, counts 1-99% and gives way to the data");
-        var layout = InformationService.Parse(InformationService.PreviewJson);
-        information.Show(layout);
-        if (layout.Section("Bộ nhớ")!.Items.Count != 2 || layout.Section("Đồ họa")!.Items.Count != 2 ||
-            layout.Section("Bộ nhớ")!.Items[0].Title != "Khe 1 · 16 GB" || layout.Section("Bộ nhớ")!.Items[0].Detail != "Samsung · DDR5 · 5600 MT/s")
-            throw new Exception("Structured hardware items were lost.");
-        var fixtureDisks = layout.Section("Lưu trữ")!.Items;
-        if (fixtureDisks.Count != 2 || fixtureDisks[0].Partitions.Count != 2 || Math.Abs(fixtureDisks[0].Partitions[0].UsedPercent - 230d / 650 * 100) > 0.01)
-            throw new Exception("Disk partitions or capacity calculations are incorrect.");
-        if (fixtureDisks[0].Detail != "1 TB · NVMe" || layout.Section("Vi xử lý")!.Items[0].Detail != "" ||
-            !layout.Section("Đồ họa")!.Items.Select(item => item.Detail).SequenceEqual(new[] { "iGPU · 128 MB", "GPU · 8 GB · 115 W" }))
-            throw new Exception("Component details are wrong: " + fixtureDisks[0].Detail);
-        if (new StorageVolume("X", 20, 10).HasCapacity || new StorageVolume("X", null, 10).HasCapacity || new StorageVolume("X", 0, 0).HasCapacity)
-            throw new Exception("Invalid capacity must not display a usage bar.");
-        if (new StorageVolume("X", 0, 10).UsedPercent != 100 || new StorageVolume("X", 10, 10).UsedPercent != 0)
-            throw new Exception("Empty/full volume usage is incorrect.");
-        Console.WriteLine("PASS structured RAM/GPU/disks and capacity boundaries");
-        foreach (var (width, height) in new[] { (1120, 810), (940, 660) })
+        Console.WriteLine("PASS Information shows the data once read and flags an unconfirmed licence");
+        information.Show(InformationService.Preview);
+        foreach (var (width, height) in new[] { (MiniApps.WindowScale.DesignWidth, MiniApps.WindowScale.DesignHeight), (MiniApps.WindowScale.DesignMinWidth, MiniApps.WindowScale.DesignMinHeight) })
         {
-            publicWindow.Width = width; publicWindow.Height = height;
+            publicWindow.Width = width * publicWindow.UiScale; publicWindow.Height = height * publicWindow.UiScale;
             publicWindow.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
             publicWindow.UpdateLayout();
             var layoutContent = (System.Windows.FrameworkElement)publicWindow.Content;
@@ -1059,50 +1055,10 @@ var renderThread = new Thread(() =>
             layoutEncoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(layoutBitmap));
             using var layoutOutput = File.Create(Path.Combine(targetDir, $"information-{width}.png"));
             layoutEncoder.Save(layoutOutput);
-            if (width == 1120)
-            {
-                ((System.Windows.Controls.ScrollViewer)((System.Windows.FrameworkElement)information.FindName("InformationContent")).Parent).ScrollToEnd();
-                publicWindow.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
-                publicWindow.UpdateLayout();
-                var bottom = new System.Windows.Media.Imaging.RenderTargetBitmap((int)layoutContent.ActualWidth, (int)layoutContent.ActualHeight, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
-                bottom.Render(layoutContent);
-                var bottomEncoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
-                bottomEncoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bottom));
-                using var bottomOutput = File.Create(Path.Combine(targetDir, "information-storage.png"));
-                bottomEncoder.Save(bottomOutput);
-                ((System.Windows.Controls.ScrollViewer)((System.Windows.FrameworkElement)information.FindName("InformationContent")).Parent).ScrollToTop();
-            }
         }
-        static IEnumerable<T> DescendantsOf<T>(System.Windows.DependencyObject node) where T : System.Windows.DependencyObject
-        {
-            for (var i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(node); i++)
-            {
-                var child = System.Windows.Media.VisualTreeHelper.GetChild(node, i);
-                if (child is T match) yield return match;
-                foreach (var deeper in DescendantsOf<T>(child)) yield return deeper;
-            }
-        }
-        // Sections sit in two columns of about the same height, so the page is not long and narrow.
-        publicWindow.Width = 1120; publicWindow.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle); publicWindow.UpdateLayout();
-        var leftColumn = (System.Windows.FrameworkElement)information.FindName("LeftSections");
-        var rightColumn = (System.Windows.FrameworkElement)information.FindName("RightSections");
-        var leftX = leftColumn.TranslatePoint(new System.Windows.Point(), information).X;
-        var rightX = rightColumn.TranslatePoint(new System.Windows.Point(), information).X;
-        var visibleSections = leftSections.Items.Cast<InformationSection>().ToArray();
-        if (visibleSections.Length != 1 || visibleSections[0].Title != "Hệ điều hành" ||
-            visibleSections[0].Facts.Count != 2 || visibleSections[0].Items.Count != 0 ||
-            rightColumn.IsVisible || System.Windows.Controls.Grid.GetColumnSpan(leftColumn) != 3)
-            throw new Exception("Hardware sections must not be displayed.");
+        publicWindow.Width = MiniApps.WindowScale.DesignWidth * publicWindow.UiScale; publicWindow.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle); publicWindow.UpdateLayout();
         if (MiniApps.InstallLayout.ReadyPadding.Top != 6 || MiniApps.InstallLayout.ProgressMinHeight != 48)
             throw new Exception("Install cards must use the compact dimensions.");
-        var sparse = InformationService.Parse("""{"OS":"Windows 10 Pro","CPU":"Intel Core i5","Serial":"S1","Manufacturer":"Dell Inc."}""");
-        if (sparse.Section("Bộ nhớ")!.Facts.Any(fact => fact.Label == "Loại") || sparse.Section("Bộ nhớ")!.Facts.Single().Value != "—" ||
-            sparse.Section("Lưu trữ")!.Items.Single().Title != "—" || sparse.Maker != "Dell Inc." ||
-            sparse.Section("Hệ điều hành")!.Facts[1] is not { Value: "Chưa xác nhận kích hoạt", Tone: "warn" } || sparse.Section("Hệ điều hành")!.Facts[2].Value != "—")
-            throw new Exception("Unknown optional values must be left out and an unconfirmed licence flagged.");
-        if (layout.Section("Hệ điều hành")!.Facts[1].Tone != "good" || !layout.ToText().Contains("Khe 2 · 16 GB · Samsung · DDR5 · 5600 MT/s"))
-            throw new Exception("Status tone or the copied report is wrong.");
-        Console.WriteLine("PASS Information target-specific layout and unknown values");
         // Every page keeps the shared window size.
         var sharedWidth = publicWindow.Width;
         var sharedHeight = publicWindow.Height;
@@ -1112,7 +1068,7 @@ var renderThread = new Thread(() =>
             publicWindow.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
             publicWindow.UpdateLayout();
             if (Math.Abs(publicWindow.Width - sharedWidth) > 1 || Math.Abs(publicWindow.Height - sharedHeight) > 1 ||
-                publicWindow.MinWidth != 940 || publicWindow.MinHeight != 660)
+                Math.Abs(publicWindow.MinWidth - MiniApps.WindowScale.DesignMinWidth * publicWindow.UiScale) > 0.5 || Math.Abs(publicWindow.MinHeight - MiniApps.WindowScale.DesignMinHeight * publicWindow.UiScale) > 0.5)
                 throw new Exception("Switching pages must not resize the window.");
         }
         information.ReloadAsync().GetAwaiter().GetResult();
