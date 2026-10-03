@@ -87,6 +87,8 @@ function Start-MiniApps {
         [switch]$Preview
     )
     $ErrorActionPreference = 'Stop'
+    # Windows PowerShell 5.1 redraws the progress bar for every chunk, which makes Invoke-WebRequest many times slower.
+    $ProgressPreference = 'SilentlyContinue'
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     if (-not $admin -and -not $Preview) {
@@ -153,12 +155,15 @@ function Start-MiniApps {
     }
 
     # Clean only owned sessions whose bootstrap lock is released and whose app/children are gone.
+    # The process list is read once, and only when there is an old session to check.
+    $processPaths = $null
     foreach ($old in @(Get-ChildItem -LiteralPath $root -Directory)) {
         if ($old.Name -notmatch '^[a-f0-9]{32}$' -or -not (Test-Path -LiteralPath (Join-Path $old.FullName '.miniapps-session'))) { continue }
         $oldLock = $null
         try {
             $oldLock = [IO.File]::Open((Join-Path $old.FullName 'session.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
-            $running = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($old.FullName + '\', [StringComparison]::OrdinalIgnoreCase) })
+            if ($null -eq $processPaths) { $processPaths = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath } | ForEach-Object { [string]$_.ExecutablePath }) }
+            $running = @($processPaths | Where-Object { $_.StartsWith($old.FullName + '\', [StringComparison]::OrdinalIgnoreCase) })
             # Worker paths may be outside the session (powershell/msiexec); a parent marker stays until clean exit.
             if ($running.Count -gt 0 -or (Test-Path -LiteralPath (Join-Path $old.FullName 'installing'))) { continue }
             $oldLock.Dispose(); $oldLock = $null
@@ -177,7 +182,10 @@ function Start-MiniApps {
         function Expand-Package([string]$Zip, [string]$Sha256, [string]$Name) {
             if ((Get-FileHash -LiteralPath $Zip -Algorithm SHA256).Hash -ne $Sha256) { throw 'Package SHA-256 mismatch. Nothing was executed.' }
             $dir = Join-Path $session $Name
-            Expand-Archive -LiteralPath $Zip -DestinationPath $dir
+            # ZipFile instead of Expand-Archive: no Archive module to load, several times faster. On .NET
+            # Framework 4.7.2+ it refuses entries that would land outside $dir.
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            [IO.Compression.ZipFile]::ExtractToDirectory($Zip, $dir)
             $packageExe = Join-Path $dir 'MiniApps.exe'
             if (-not (Test-Path -LiteralPath $packageExe)) { throw 'Package does not contain MiniApps.exe.' }
             return $packageExe

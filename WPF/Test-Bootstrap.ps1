@@ -66,11 +66,25 @@ try {
     Compress-Archive -Path (Join-Path $payload '*') -DestinationPath $package
     $env:TEMP = Join-Path $fixture 'temp'; $env:TMP = $env:TEMP
     New-Item -ItemType Directory -Path $env:TEMP | Out-Null
-    Start-MiniApps -PackagePath $package -ExpectedSha256 (Get-FileHash $package -Algorithm SHA256).Hash -Preview
+    # Old sessions: one abandoned (removed), one with a process still running from it and one
+    # still marked as installing (both kept).
+    $oldSessions = @{}
+    foreach ($name in 'stale', 'busy', 'installing') {
+        $oldSessions[$name] = Join-Path (Join-Path $env:TEMP 'MiniApps') ([Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $oldSessions[$name] -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $oldSessions[$name] '.miniapps-session') -Value 'MiniApps session v1'
+    }
+    Set-Content -LiteralPath (Join-Path $oldSessions.installing 'installing') -Value 'fixture'
+    Add-Type -TypeDefinition 'public class BootstrapSleeper { public static void Main() { System.Threading.Thread.Sleep(60000); } }' -OutputAssembly (Join-Path $oldSessions.busy 'sleeper.exe') -OutputType ConsoleApplication
+    $sleeper = Start-Process -FilePath (Join-Path $oldSessions.busy 'sleeper.exe') -WindowStyle Hidden -PassThru
+    try {
+        Start-MiniApps -PackagePath $package -ExpectedSha256 (Get-FileHash $package -Algorithm SHA256).Hash -Preview
+    } finally { if (-not $sleeper.HasExited) { $sleeper.Kill(); $sleeper.WaitForExit() } }
     if (-not (Test-Path -LiteralPath $env:MINIAPPS_FIXTURE_RESULT)) { throw 'Fixture/child did not finish before cleanup.' }
-    $sessions = @(Get-ChildItem -LiteralPath (Join-Path $env:TEMP 'MiniApps') -Directory)
-    if ($sessions.Count -ne 0) { throw 'Bootstrap did not clean its session.' }
-    Write-Host 'PASS bootstrap: verify, extract, launch fixture, wait, clean session.'
+    $sessions = @(Get-ChildItem -LiteralPath (Join-Path $env:TEMP 'MiniApps') -Directory | ForEach-Object FullName | Sort-Object)
+    $kept = @($oldSessions.busy, $oldSessions.installing | Sort-Object)
+    if (Compare-Object $sessions $kept) { throw "Bootstrap cleanup kept the wrong sessions: $($sessions -join ', ')" }
+    Write-Host 'PASS bootstrap: verify, extract, launch fixture, wait, clean its session and only abandoned old sessions.'
     $probeDir = Join-Path $fixture 'probe'
     New-Item -ItemType Directory -Path $probeDir | Out-Null
     foreach ($case in @(@{ Name = 'ok'; Body = 'return 0;' }, @{ Name = 'fail'; Body = 'return 3;' }, @{ Name = 'hang'; Body = 'System.Threading.Thread.Sleep(30000); return 0;' })) {
