@@ -1,6 +1,10 @@
 # Trạng thái bàn giao
 
-## Logo MiniApps (hướng A: lưới ứng dụng) — 2026-10-03, local (chưa commit)
+## Phát hành v0.4.6 — 2026-10-03
+
+Theo yêu cầu người dùng (chỉ net48): `Publish.ps1 -Target net48 -Version 0.4.6`, `gh release create v0.4.6` (target e5a71106fac1e0243de48b099616e0c1bb55958e), thêm logo lưới ứng dụng (mục bên dưới). ZIP net48 557647 bytes, SHA-256 `65b58faeb29666304af5a98d5c47cfc8203d98f6cd8116e7fcc7a466134936f0`; net10 vẫn là bản v0.3.6 dùng lại nguyên byte (63080335 bytes, `e1cbb8c3…f515`). Trước upload: test net48 96 logic PASS + WPF; giải nén, ProductVersion 0.4.6+e5a7110, `--validate-config` và `--preview --startup-smoke-test` thoát 0, exe trong ZIP mang icon mới. Sau upload: tải lại 5 asset đều 200, trùng byte. Bootstrap chuyển sang v0.4.6; Test-Bootstrap 8/8.
+
+## Logo MiniApps (hướng A: lưới ứng dụng) — 2026-10-03, commit e5a7110, phát hành trong v0.4.6
 
 Theo yêu cầu người dùng (chọn hướng A trong 4 phương án): 3 ô #B9C9DD và 1 ô Accent #3B6EA8 có mũi tên tải trắng. `tool/AppIcon/New-AppIcon.ps1` tạo `MiniApps/MiniApps.ico` (10 cỡ 16–256 px, PNG trong ICO): ô canh nguyên pixel ở mọi cỡ, mũi tên từ 32 px (nét ≥ 2 px, canh tâm pixel), dưới 32 px chỉ còn 4 ô; ảnh xem trước ở `artifacts/icon`. csproj có `ApplicationIcon` (icon exe, cả net48 và net10) và `Resource` cho `Window.Icon`; thanh bên vẽ cùng logo bằng vector WPF (`BrandMark`, 34 px trước khi scale) cạnh chữ MiniApps. Test net48 96 logic PASS + WPF, kiểm tra Window.Icon đủ 10 cỡ, exe có icon (ExtractIconEx), BrandMark hiển thị. Chưa build/test net10.
 
