@@ -1,6 +1,10 @@
 # Trạng thái bàn giao
 
-## Bootstrap mở nhanh hơn — 2026-10-03, local (chưa push)
+## Phát hành v0.4.4 — 2026-10-03
+
+Theo yêu cầu người dùng (chỉ net48): `Publish.ps1 -Target net48 -Version 0.4.4`, `gh release create v0.4.4` (target bd2e7dd5e2866d10147b795cdbb74a884bd2879a), gồm tải tiếp/chia luồng, LibreOffice mirror, bỏ Winget, nhãn "Chọn Office" và bootstrap mở nhanh (hai mục bên dưới). ZIP net48 547803 bytes, SHA-256 `ca7170fe4e2dcfa97165a6220dcd11836c4e4abb97f4a0c8f5750d3f71e7c5ff`; net10 vẫn là bản v0.3.6 dùng lại nguyên byte (63080335 bytes, `e1cbb8c3…f515`). Trước upload: test net48 95 logic PASS + WPF, Test-Bootstrap 8/8; giải nén, ProductVersion 0.4.4+bd2e7dd, `--validate-config` và `--preview --startup-smoke-test` thoát 0, cấu hình đóng gói không còn Winget và dùng mirror LibreOffice. Sau upload: tải lại 5 asset đều 200, trùng byte. Bootstrap chuyển sang v0.4.4; Test-Bootstrap 8/8. Người dùng sẽ test trực tiếp trên máy khách; chưa cài thật bộ cài nào bằng bản này.
+
+## Bootstrap mở nhanh hơn — 2026-10-03 (đã push bd2e7dd, phát hành cùng v0.4.4)
 
 Theo yêu cầu người dùng (lệnh `irm` mở chậm). Đo từng bước trên máy phát triển với v0.4.3: tải ZIP net48 1,01 s khi bật progress so với 0,38 s khi tắt; `Expand-Archive` 0,27–0,65 s so với `ZipFile` 0,03–0,08 s; `Get-CimInstance Win32_Process` 0,14–0,37 s cho mỗi phiên cũ; probe `--validate-config` ~0,5 s; MiniApps tới Loaded ~0,65 s. Đã code trong `bootstrap.ps1`: `$ProgressPreference = 'SilentlyContinue'` trong `Start-MiniApps` (áp dụng cả tiến trình nâng quyền); giải nén bằng `[IO.Compression.ZipFile]::ExtractToDirectory`; đọc danh sách tiến trình một lần và chỉ khi có phiên cũ cần kiểm tra. Test-Bootstrap 8/8, thêm ca dọn phiên cũ (phiên bỏ dở bị xóa; phiên có tiến trình đang chạy và phiên còn `installing` được giữ). Chưa đo trên máy thật mới cài Windows. Chưa làm: bỏ probe (MiniApps báo sẵn sàng), nhúng hash vào bootstrap thay manifest.
 Lưu ý: `irm` lấy `bootstrap.ps1` trực tiếp từ `main`, push là có hiệu lực ngay với mọi người dùng.
@@ -13,7 +17,7 @@ Theo yêu cầu người dùng:
 - Tải tiếp + chia luồng trong `DeploymentService.DownloadAsync` (chi tiết ở ARCHITECTURE.md). Server không hỗ trợ Range vẫn tải như cũ, không tốn thêm request.
 - Bỏ Windows Setting "Winget (update)" khỏi `windows.json`, `WindowsSettingsCatalog` và `WindowsCompatibility`; `SettingsStore` tự loại mục Action Winget trong cấu hình cũ. `Scripts/Update-Winget.ps1` vẫn giữ vì EXTEND Môi trường C++ gọi nó.
 
-Kiểm tra: build net48 0 warning/0 error; 95 logic PASS + WPF, gồm 3 test mới với server giả hỗ trợ Range (chia 4 luồng + SHA-256, tải tiếp đúng byte 1 MB sau khi đứt, đoạn lỗi mãi báo lỗi gốc HTTP 500). Thử tải thật (runner giả, không chạy bộ cài nào): OnlyOffice, LibreOffice, K-Lite, Zoom (4 luồng) và Chrome cùng lúc ~790 MB trong 12,4 s, LibreOffice qua SHA-256. Output `artifacts/review-net48-download-20261003-154638` kèm ReleaseConfig; validate và `--preview --startup-smoke-test` thoát 0. Chưa build/test net10. Chưa commit/push/phát hành.
+Kiểm tra: build net48 0 warning/0 error; 95 logic PASS + WPF, gồm 3 test mới với server giả hỗ trợ Range (chia 4 luồng + SHA-256, tải tiếp đúng byte 1 MB sau khi đứt, đoạn lỗi mãi báo lỗi gốc HTTP 500). Thử tải thật (runner giả, không chạy bộ cài nào): OnlyOffice, LibreOffice, K-Lite, Zoom (4 luồng) và Chrome cùng lúc ~790 MB trong 12,4 s, LibreOffice qua SHA-256. Output `artifacts/review-net48-download-20261003-154638` kèm ReleaseConfig; validate và `--preview --startup-smoke-test` thoát 0. Chưa build/test net10. Đã push (1e99b6d) và phát hành trong v0.4.4.
 
 ## Phát hành v0.4.3 — 2026-10-03
 
