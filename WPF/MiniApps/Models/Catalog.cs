@@ -27,8 +27,8 @@ public sealed class AppDefinition : Observable
     public string Sha256 { get => sha256; set => Set(ref sha256, value); }
     private string suite = "";
     public string Suite { get => suite; set => Set(ref suite, value); }
-    // The installer starts the installed app and leaves it running (EVKey's self-extractor does),
-    // so only the installer process itself is awaited, not everything it started.
+    // Every installer is awaited without the apps it opens. This flag also skips waiting for stages that
+    // still run from the work folder after the installer exits (EVKey's self-extractor needs neither).
     private bool waitInstallerOnly;
     public bool WaitInstallerOnly { get => waitInstallerOnly; set => Set(ref waitInstallerOnly, value); }
 }

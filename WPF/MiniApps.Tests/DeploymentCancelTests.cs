@@ -154,6 +154,42 @@ internal static class DeploymentCancelTests
                 if (app != null) { if (!app.HasExited) { app.Kill(); app.WaitForExit(); } app.Dispose(); }
             }
         });
+        check("Installer run waits for stages still running from the helper folder", () =>
+        {
+            var work = Path.Combine(root, "job-helper"); Directory.CreateDirectory(work);
+            var marker = Path.Combine(work, "helper.pid");
+            using var group = new DeploymentProcessGroup(CancellationToken.None, log);
+            var lines = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            // The fixture executable stands in for a self-extracted stage: its folder is the helper folder.
+            var run = group.RunAsync(Launch("--job-leaf", marker, false), work, new Capture<string>(lines.Enqueue), Path.GetDirectoryName(Executable), "Fixture");
+            WaitFile(marker);
+            var helper = Process.GetProcessById(int.Parse(File.ReadAllText(marker)));
+            try
+            {
+                if (run.Wait(TimeSpan.FromSeconds(2))) throw new Exception("Returned while a helper stage was still running.");
+                helper.Kill(); helper.WaitForExit();
+                Bounded(run);
+                if (run.Result != 0 || !lines.Any(line => line.StartsWith("Fixture: bộ cài chính đã thoát", StringComparison.Ordinal))) throw new Exception("Helper wait was not reported.");
+            }
+            finally { if (!helper.HasExited) { helper.Kill(); helper.WaitForExit(); } helper.Dispose(); }
+        });
+        check("Installer run does not wait for an app it opened outside the helper folder", () =>
+        {
+            var work = Path.Combine(root, "job-opened-app"); Directory.CreateDirectory(work);
+            var marker = Path.Combine(work, "app.pid");
+            using var group = new DeploymentProcessGroup(CancellationToken.None, log);
+            var lines = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            Process? app = null;
+            try
+            {
+                Bounded(group.RunAsync(Launch("--job-leaf", marker, false), work, new Capture<string>(lines.Enqueue), work, "Fixture"));
+                WaitFile(marker); app = Process.GetProcessById(int.Parse(File.ReadAllText(marker)));
+                if (app.HasExited) throw new Exception("The opened app was stopped.");
+                var name = Path.GetFileName(Executable);
+                if (!lines.Any(line => line.StartsWith("Fixture: bộ cài đã thoát", StringComparison.Ordinal) && line.Contains(name))) throw new Exception("Left app was not reported.");
+            }
+            finally { if (app != null) { if (!app.HasExited) { app.Kill(); app.WaitForExit(); } app.Dispose(); } }
+        });
         check("Normal completion does not kill background applications", () =>
         {
             var work = Path.Combine(root, "job-normal"); Directory.CreateDirectory(work);

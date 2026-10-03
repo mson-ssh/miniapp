@@ -417,7 +417,8 @@ try
         using var client = new System.Net.Http.HttpClient(new FakeHttp());
         var service = new DeploymentService(client, (command, _, _) => { commands[command.Contains("chrome") ? "chrome" : "evkey"] = command; return Task.FromResult(0); }, _ => false);
         service.RunAsync(apps.Where(a => a.Id is "evkey" or "chrome").ToArray(), [], Path.Combine(root, "evkey"), new InlineProgress<DeploymentEvent>(_ => { }), new InlineProgress<string>(_ => { }), default).GetAwaiter().GetResult();
-        Assert(commands["evkey"].Contains("$p.WaitForExit()") && !commands["evkey"].Contains("-Wait ") && commands["chrome"].Contains("-Wait -PassThru"));
+        // No installer uses -Wait: it would also wait for the app the installer opens.
+        Assert(commands.Values.All(command => command.Contains("$p.WaitForExit()") && !command.Contains("-Wait ")));
         // A stand-in installer that starts a long-running child and exits, as EVKey's self-extractor does.
         var standIn = System.Text.RegularExpressions.Regex.Replace(commands["evkey"], "-FilePath '[^']*' -ArgumentList '-s'",
             "-FilePath 'cmd.exe' -ArgumentList '/c start \"\" /min ping -n 30 127.0.0.1' -WindowStyle Hidden");

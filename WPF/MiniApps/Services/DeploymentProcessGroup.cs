@@ -65,7 +65,9 @@ internal sealed class DeploymentProcessGroup : IDisposable
             await Task.Delay(100).ConfigureAwait(false);
         }
     }
-    internal async Task<int> RunAsync(string command, string workDir, IProgress<string> outputLog)
+    // helperFolder: after the shell exits, keep waiting for processes of this task that run from that
+    // folder (an installer's self-extracted stages), but not for apps it started elsewhere.
+    internal async Task<int> RunAsync(string command, string workDir, IProgress<string> outputLog, string? helperFolder = null, string label = "")
     {
         token.ThrowIfCancellationRequested();
         var gateName = "Local\\MiniApps.Start." + Guid.NewGuid().ToString("N");
@@ -124,6 +126,7 @@ internal sealed class DeploymentProcessGroup : IDisposable
             {
                 process.CancelOutputRead(); process.CancelErrorRead();
             }
+            if (helperFolder != null) await WaitForHelpersAsync(job, helperFolder, label, outputLog).ConfigureAwait(false);
             lock (sync)
             {
                 // Finished before any cancel: release the job so a later HỦY leaves its apps running.
@@ -133,6 +136,75 @@ internal sealed class DeploymentProcessGroup : IDisposable
             token.ThrowIfCancellationRequested();
             return process.ExitCode;
         }
+    }
+    // An installer that opens the installed app (or leaves an updater running) must not hold the run
+    // until the user closes that app: only processes still running from the work folder are awaited.
+    private async Task WaitForHelpersAsync(IntPtr job, string helperFolder, string label, IProgress<string> outputLog)
+    {
+        var root = LongPath(helperFolder).TrimEnd('\\') + "\\";
+        var announced = false;
+        while (!token.IsCancellationRequested)
+        {
+            var images = ProcessImages(job);
+            var helpers = images.Where(image => image.StartsWith(root, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (helpers.Count == 0)
+            {
+                var left = images.Select(Path.GetFileName)
+                    .Where(name => !name.Equals("conhost.exe", StringComparison.OrdinalIgnoreCase))
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (left.Count > 0) outputLog.Report($"{label}: bộ cài đã thoát; không chờ tiến trình nó để lại: {string.Join(", ", left)}.");
+                return;
+            }
+            if (!announced)
+            {
+                announced = true;
+                outputLog.Report($"{label}: bộ cài chính đã thoát; chờ tiến trình phụ trong thư mục tạm: {string.Join(", ", helpers.Select(Path.GetFileName).Distinct(StringComparer.OrdinalIgnoreCase))}.");
+            }
+            await Task.Delay(500).ConfigureAwait(false);
+        }
+    }
+    // Image paths of the processes still in the job; a process that exits or cannot be opened is skipped.
+    private static List<string> ProcessImages(IntPtr job)
+    {
+        var images = new List<string>();
+        var capacity = 64;
+        while (true)
+        {
+            var size = 2 * sizeof(uint) + capacity * IntPtr.Size;
+            var buffer = Marshal.AllocHGlobal(size);
+            try
+            {
+                if (!QueryInformationJobObject(job, 3, buffer, size, IntPtr.Zero))
+                {
+                    var error = Marshal.GetLastWin32Error();
+                    if (error == 234 && capacity < 65536) { capacity *= 4; continue; } // ERROR_MORE_DATA
+                    throw new Win32Exception(error);
+                }
+                var count = Marshal.ReadInt32(buffer, sizeof(uint));
+                for (var i = 0; i < count; i++)
+                {
+                    var pid = (uint)Marshal.ReadIntPtr(buffer, 2 * sizeof(uint) + i * IntPtr.Size).ToInt64();
+                    var handle = OpenProcess(0x1000, false, pid); // PROCESS_QUERY_LIMITED_INFORMATION
+                    if (handle == IntPtr.Zero) continue;
+                    try
+                    {
+                        var path = new StringBuilder(32768); var length = path.Capacity;
+                        if (QueryFullProcessImageName(handle, 0, path, ref length)) images.Add(path.ToString(0, length));
+                    }
+                    finally { CloseHandle(handle); }
+                }
+                return images;
+            }
+            finally { Marshal.FreeHGlobal(buffer); }
+        }
+    }
+    // %TEMP% may hold 8.3 names (C:\Users\NGUYEN~1\...); process image paths are always long.
+    private static string LongPath(string path)
+    {
+        var full = Path.GetFullPath(path);
+        var result = new StringBuilder(32768);
+        var length = GetLongPathName(full, result, result.Capacity);
+        return length > 0 && length < result.Capacity ? result.ToString(0, (int)length) : full;
     }
     public void Dispose()
     {
@@ -159,6 +231,14 @@ internal sealed class DeploymentProcessGroup : IDisposable
     private static extern bool TerminateJobObject(IntPtr job, uint exitCode);
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool QueryInformationJobObject(IntPtr job, int infoClass, out Accounting info, int size, IntPtr length);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool QueryInformationJobObject(IntPtr job, int infoClass, IntPtr info, int size, IntPtr length);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(uint access, bool inherit, uint processId);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool QueryFullProcessImageName(IntPtr process, int flags, StringBuilder name, ref int size);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetLongPathName(string path, StringBuilder result, int size);
     [DllImport("kernel32.dll")]
     private static extern bool CloseHandle(IntPtr handle);
 }

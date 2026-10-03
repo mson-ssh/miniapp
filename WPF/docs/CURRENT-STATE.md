@@ -1,5 +1,9 @@
 # Trạng thái bàn giao
 
+## Không chờ app do bộ cài mở — 2026-10-03, local, net48
+
+Rà soát nguy cơ treo khi CÀI ĐẶT: `Start-Process -Wait` chờ mọi tiến trình con, nên bộ cài nào tự mở app sau khi cài (nghi: Zalo, WPS, Zoom, UltraViewer, updater Chrome — chưa kiểm chứng từng app) sẽ giữ "Đang cài đặt" tới khi người dùng đóng app; trước đây chỉ EVKey có `WaitInstallerOnly`. Đã code: mọi bộ cài chỉ chờ chính tiến trình bộ cài (`$p.WaitForExit()`); sau đó `DeploymentProcessGroup.WaitForHelpersAsync` liệt kê tiến trình còn trong Job của tác vụ (JobObjectBasicProcessIdList) và chỉ chờ tiến trình chạy từ thư mục work (giai đoạn tự giải nén vào %TEMP%, so đường dẫn dài để tránh tên 8.3); tiến trình ở nơi khác không được chờ, tên ghi vào log. `WaitInstallerOnly` (EVKey) bỏ cả bước chờ này. HỦY không đổi. Rủi ro còn lại: bộ cài thoát sớm trong khi giai đoạn cài thật chạy ngoài thư mục tạm sẽ bị coi là xong sớm — xem log "không chờ tiến trình nó để lại". Test net48 92 logic PASS + WPF, có 2 test tiến trình thật (chờ tiến trình phụ trong thư mục, không chờ app ngoài thư mục). Output `artifacts/review-net48-installer-wait-20261003-152010` kèm ReleaseConfig; validate và `--preview --startup-smoke-test` thoát 0. Chưa build/test net10 (source dùng chung đã đổi). Chưa cài thật bộ cài nào; chưa commit/push/phát hành.
+
 ## Phát hành v0.4.2 — 2026-09-30
 
 Theo yêu cầu người dùng (chỉ net48): `Publish.ps1 -Target net48 -Version 0.4.2`, `gh release create v0.4.2` (target 77ab675d438a07773b06dec389322a5e89849d30). ZIP net48 545274 bytes, SHA-256 `639f19098bca8c5e2767821980df2905e01d5ecfcc28c5f1a896e2646027ff1b`; net10 vẫn là bản v0.3.6 dùng lại nguyên byte (63080335 bytes, `e1cbb8c3…f515`), chưa có HỦY/CLEAN mới. Trước upload: giải nén, ProductVersion 0.4.2+77ab675, `--validate-config` và `--preview --startup-smoke-test` thoát 0. Sau upload: tải lại 5 asset đều 200, trùng byte. Bootstrap chuyển sang v0.4.2; Test-Bootstrap 8/8. Chưa chạy CLEAN thật.

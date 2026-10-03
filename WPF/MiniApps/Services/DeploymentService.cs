@@ -51,10 +51,10 @@ public sealed class DeploymentService
         WindowsSettingsCatalog.Validate(options);
         Directory.CreateDirectory(workDir);
         using var processGroup = useOwnedProcesses ? new DeploymentProcessGroup(token, log) : null;
-        async Task<int> RunOwned(string command)
+        async Task<int> RunOwned(string command, string? helperFolder = null, string label = "")
         {
             token.ThrowIfCancellationRequested();
-            var code = processGroup != null ? await processGroup.RunAsync(command, workDir, log) : await run(command, workDir, log);
+            var code = processGroup != null ? await processGroup.RunAsync(command, workDir, log, helperFolder, label) : await run(command, workDir, log);
             token.ThrowIfCancellationRequested();
             return code;
         }
@@ -111,11 +111,12 @@ public sealed class DeploymentService
                 var isMsi = Path.GetExtension(path).Equals(".msi", StringComparison.OrdinalIgnoreCase);
                 var file = isMsi ? Path.Combine(Environment.SystemDirectory, "msiexec.exe") : path;
                 var args = isMsi ? $"/i \"{path}\" {app.Arguments}" : app.Arguments;
-                // -Wait also waits for every process the installer started. An installer that leaves the
-                // installed app running is awaited on its own; reading Handle first keeps its exit code.
+                // Not -Wait: it also waits for the app an installer opens (Zalo, WPS...) until the user closes it.
+                // The shell waits for the installer itself (reading Handle first keeps its exit code); the process
+                // group then waits for stages still running from the work folder, unless WaitInstallerOnly.
                 var command = $"$p = Start-Process -FilePath {Quote(file)} " +
                     (string.IsNullOrWhiteSpace(args) ? "" : $"-ArgumentList {Quote(args)} ") +
-                    (app.WaitInstallerOnly ? "-PassThru -ErrorAction Stop; $null = $p.Handle; $p.WaitForExit(); " : "-Wait -PassThru -ErrorAction Stop; ") +
+                    "-PassThru -ErrorAction Stop; $null = $p.Handle; $p.WaitForExit(); " +
                     "if ($null -eq $p.ExitCode) { throw 'Installer returned no exit code' }; exit $p.ExitCode";
                 int code = 1618;
                 for (var attempt = 0; attempt <= 3; attempt++)
@@ -126,9 +127,9 @@ public sealed class DeploymentService
                     {
                         token.ThrowIfCancellationRequested();
                         events.Report(new(app.Id, string.IsNullOrWhiteSpace(app.Arguments) ? "Đang cài · hãy thao tác trong bộ cài" : "Đang cài đặt", 100));
-                        log.Report(app.WaitInstallerOnly ? $"{app.Name}: bắt đầu bộ cài. Chờ bộ cài kết thúc, không chờ ứng dụng nó mở." : $"{app.Name}: bắt đầu bộ cài. Chờ toàn bộ tiến trình con kết thúc.");
+                        log.Report(app.WaitInstallerOnly ? $"{app.Name}: bắt đầu bộ cài. Chờ bộ cài kết thúc, không chờ ứng dụng nó mở." : $"{app.Name}: bắt đầu bộ cài. Chờ bộ cài và tiến trình phụ trong thư mục tạm, không chờ ứng dụng nó mở.");
                         // Explicit cancellation terminates the task's owned job; it cannot roll back changes.
-                        code = await RunOwned(command);
+                        code = await RunOwned(command, app.WaitInstallerOnly ? null : workDir, app.Name);
                     }
                     finally
                     {
