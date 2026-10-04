@@ -1,5 +1,11 @@
 # Trạng thái bàn giao
 
+## Nguồn tải dl.miniaz.io.vn + dự phòng; sửa icon OneDrive — 2026-10-04, đã commit (chưa phát hành)
+
+Theo yêu cầu người dùng: bucket R2 có tên miền riêng `dl.miniaz.io.vn` (Cloudflare Cache Rule, Edge TTL 4 giờ; đã thấy MISS→HIT, Zalo 175 MB khi HIT ~97 MB/s). `Catalog.Primary` và 12 link `ReleaseConfig/apps.json` chuyển sang tên miền này. `Catalog.DownloadSources` cho mọi link thuộc bucket (kể cả cấu hình cũ còn `r2.dev`) thử lần lượt `dl.miniaz.io.vn` → `r2.dev` → `github.com/mson-ssh/miniapp/releases/download/installers/<tên file>`; link khác giữ nguyên một nguồn. `DeploymentService` chuyển nguồn khi lỗi kết nối/HTTP, file không hợp lệ, hoặc quá 20 giây chưa phản hồi (nguồn cuối vẫn 90 giây). Info.exe và `Remove-Office.ps1` (OTP.zip) cũng thử `dl` trước. **Release `installers` chưa tồn tại** — nguồn thứ ba trả 404 cho tới khi tạo release và upload đúng tên file. OnlyOffice/LibreOffice vẫn chỉ một nguồn hãng/mirror.
+
+Sửa icon OneDrive ngoài Desktop: script "Hiện biểu tượng Desktop" dùng `New-Item -Force` trên key `HideDesktopIcons\NewStartPanel` đã có, xóa mất giá trị ẩn `{018D5C66…}=1` OneDrive tự ghi khi tạo profile. Nay chỉ tạo key khi thiếu và đặt lại OneDrive = 1. Cùng lỗi trong `Enable-Smb.ps1` (key `Policies\…\LanmanWorkstation`) đã sửa. Test net48 98 logic PASS + WPF; chưa chạy thật trên registry/cài đặt.
+
 ## Phát hành v0.4.6 — 2026-10-03
 
 Theo yêu cầu người dùng (chỉ net48): `Publish.ps1 -Target net48 -Version 0.4.6`, `gh release create v0.4.6` (target e5a71106fac1e0243de48b099616e0c1bb55958e), thêm logo lưới ứng dụng (mục bên dưới). ZIP net48 557647 bytes, SHA-256 `65b58faeb29666304af5a98d5c47cfc8203d98f6cd8116e7fcc7a466134936f0`; net10 vẫn là bản v0.3.6 dùng lại nguyên byte (63080335 bytes, `e1cbb8c3…f515`). Trước upload: test net48 96 logic PASS + WPF; giải nén, ProductVersion 0.4.6+e5a7110, `--validate-config` và `--preview --startup-smoke-test` thoát 0, exe trong ZIP mang icon mới. Sau upload: tải lại 5 asset đều 200, trùng byte. Bootstrap chuyển sang v0.4.6; Test-Bootstrap 8/8.

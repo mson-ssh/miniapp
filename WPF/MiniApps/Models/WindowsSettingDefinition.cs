@@ -89,20 +89,34 @@ public static class WindowsSettingsCatalog
         "ExecutionPolicy" => "Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope LocalMachine -Force -ErrorAction Stop",
         "InfoExe" => """
             $ErrorActionPreference = 'Stop'
-            $url = 'https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/info.exe'
+            # Custom domain first, then the same bucket's r2.dev address, then the GitHub release copy.
+            $urls = @(
+                'https://dl.miniaz.io.vn/info.exe',
+                'https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/info.exe',
+                'https://github.com/mson-ssh/miniapp/releases/download/installers/info.exe'
+            )
             $desktop = [Environment]::GetFolderPath('Desktop')
             if ([string]::IsNullOrWhiteSpace($desktop)) { throw 'Cannot resolve the Desktop folder.' }
             $destination = Join-Path $desktop 'info.exe'
             $staged = Join-Path ([IO.Path]::GetTempPath()) ('MiniApps-info-' + [guid]::NewGuid().ToString('N') + '.exe')
             try {
-                Invoke-WebRequest -Uri $url -OutFile $staged -UseBasicParsing -ErrorAction Stop
-                $stream = [IO.File]::OpenRead($staged)
-                try {
-                    if ($stream.Length -lt 2 -or $stream.ReadByte() -ne 0x4D -or $stream.ReadByte() -ne 0x5A) {
-                        throw 'Downloaded file is not a Windows executable.'
+                $downloaded = $false
+                foreach ($url in $urls) {
+                    try {
+                        Invoke-WebRequest -Uri $url -OutFile $staged -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
+                        $stream = [IO.File]::OpenRead($staged)
+                        try {
+                            if ($stream.Length -lt 2 -or $stream.ReadByte() -ne 0x4D -or $stream.ReadByte() -ne 0x5A) {
+                                throw 'Downloaded file is not a Windows executable.'
+                            }
+                        }
+                        finally { $stream.Dispose() }
+                        $downloaded = $true
+                        break
                     }
+                    catch { Write-Output "Không tải được info.exe từ $url - $($_.Exception.Message)" }
                 }
-                finally { $stream.Dispose() }
+                if (-not $downloaded) { throw 'Không tải được info.exe từ nguồn nào.' }
                 Copy-Item -LiteralPath $staged -Destination $destination -Force -ErrorAction Stop
             }
             finally { Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue }

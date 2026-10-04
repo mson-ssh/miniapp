@@ -5,8 +5,9 @@
 # Office Tool Plus "toolbox /rmoffice". The CLI moved to Office Tool Plus after Microsoft's
 # GetHelpCmd (OfficeScrubScenario) kept failing in real tests while /rmoffice worked.
 #
-# Office Tool Plus is pinned to one release and checked by SHA-256. The R2 mirror and the GitHub
-# release are the same file. To move to a newer release, change the URLs and $Sha256 together.
+# Office Tool Plus is pinned to one release and checked by SHA-256. The R2 bucket (custom domain,
+# then r2.dev) and the GitHub release are the same file. To move to a newer release, change the URLs
+# and $Sha256 together.
 param(
     # Scan, download, verify and unpack, then print the command instead of running it.
     [switch]$DryRun
@@ -19,6 +20,7 @@ $ProgressPreference = 'SilentlyContinue'
 
 $Sha256 = '68A9EBF8B569FA56A55A1B3601EC9260AEB2A3D9ACFED1DEF039C4CC9E092C9F'
 $Urls = @(
+    'https://dl.miniaz.io.vn/OTP.zip',
     'https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/OTP.zip',
     'https://github.com/YerongAI/Office-Tool/releases/download/v11.6.6.0/Office_Tool_with_runtime_v11.6.6.0_x64.zip'
 )

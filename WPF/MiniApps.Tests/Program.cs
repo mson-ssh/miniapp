@@ -533,6 +533,39 @@ try
             new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(lines.Add), default).GetAwaiter().GetResult();
         Assert(outcomes.Any(e => e.Id == app.Id && e.Status == "Thất bại" && e.Failed) && lines.Any(line => line.Contains("500")) && !lines.Any(line => line.Contains("disposed")));
     });
+    Check("Bucket installers try the custom domain, then r2.dev, then the GitHub release", () => {
+        var expected = new[] { Catalog.Primary + "/zalo.exe", Catalog.R2 + "/zalo.exe", Catalog.GitHubMirror + "/zalo.exe" };
+        Assert(Catalog.DownloadSources(Catalog.Primary + "/zalo.exe").SequenceEqual(expected));
+        // Configs saved with the r2.dev address use the custom domain first as well.
+        Assert(Catalog.DownloadSources(Catalog.R2 + "/zalo.exe").SequenceEqual(expected));
+        Assert(Catalog.DownloadSources("https://example.com/zalo.exe").SequenceEqual(new[] { "https://example.com/zalo.exe" }));
+        Assert(Catalog.Defaults().Where(a => a.Id is not ("onlyoffice" or "libreoffice")).All(a => a.Url.StartsWith(Catalog.Primary + "/")));
+        Assert(new SettingsStore(Path.GetFullPath("ReleaseConfig")).Load(required: true)
+            .Where(a => a.Id is not ("onlyoffice" or "libreoffice")).All(a => a.Url.StartsWith(Catalog.Primary + "/")));
+    });
+    Check("A failing or silent source falls back to the next one", () => {
+        var previous = DeploymentService.FallbackResponseTimeout;
+        DeploymentService.FallbackResponseTimeout = TimeSpan.FromMilliseconds(300);
+        try
+        {
+            // Custom domain never answers, r2.dev answers 404, the GitHub release serves the file.
+            using var handler = new SourceHttp(request => request.RequestUri!.Host switch
+            {
+                "dl.miniaz.io.vn" => null,
+                var host when host.EndsWith(".r2.dev") => System.Net.HttpStatusCode.NotFound,
+                _ => System.Net.HttpStatusCode.OK
+            });
+            using var client = new System.Net.Http.HttpClient(handler);
+            var app = Catalog.Defaults().Single(a => a.Id == "zalo");
+            var outcomes = new System.Collections.Concurrent.ConcurrentBag<DeploymentEvent>(); var lines = new System.Collections.Concurrent.ConcurrentBag<string>();
+            new DeploymentService(client, (_, _, _) => Task.FromResult(0), _ => false).RunAsync([app], [], Path.Combine(root, "fallback"),
+                new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(lines.Add), default).GetAwaiter().GetResult();
+            Assert(outcomes.Any(e => e.Id == "zalo" && e.Status == "Hoàn tất" && !e.Failed));
+            Assert(handler.Hosts.SequenceEqual(new[] { "dl.miniaz.io.vn", new Uri(Catalog.R2).Host, "github.com" }));
+            Assert(lines.Any(l => l.Contains("chuyển sang " + new Uri(Catalog.R2).Host)) && lines.Any(l => l.Contains("chuyển sang github.com")));
+        }
+        finally { DeploymentService.FallbackResponseTimeout = previous; }
+    });
     Check("MSI installers are serialized while EXE can overlap MSI", () => {
         using var client = new System.Net.Http.HttpClient(new FakeHttp());
         var apps = Catalog.Defaults().Take(3).ToArray();
@@ -1107,6 +1140,19 @@ sealed class FakeHttp : System.Net.Http.HttpMessageHandler
         return Task.FromResult(new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
         { RequestMessage = request, Content = new System.Net.Http.ByteArrayContent(request.RequestUri!.AbsolutePath.EndsWith(".msi")
             ? [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1] : [0x4D, 0x5A, 0, 0, 0, 0, 0, 0]) });
+    }
+}
+// Answers each request with the status the rule picks for it; null never answers (until cancelled).
+sealed class SourceHttp(Func<System.Net.Http.HttpRequestMessage, System.Net.HttpStatusCode?> rule) : System.Net.Http.HttpMessageHandler
+{
+    public System.Collections.Concurrent.ConcurrentQueue<string> Hosts { get; } = new();
+    protected override async Task<System.Net.Http.HttpResponseMessage> SendAsync(System.Net.Http.HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        Hosts.Enqueue(request.RequestUri!.Host);
+        var status = rule(request);
+        if (status == null) { await Task.Delay(Timeout.Infinite, cancellationToken); }
+        return new System.Net.Http.HttpResponseMessage(status!.Value)
+        { RequestMessage = request, Content = new System.Net.Http.ByteArrayContent([0x4D, 0x5A, 0, 0, 0, 0, 0, 0]) };
     }
 }
 // Serves one payload with HTTP range support. CutAfter ends the first response early (a dropped

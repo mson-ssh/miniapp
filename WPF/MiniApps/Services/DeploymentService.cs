@@ -230,24 +230,45 @@ public sealed class DeploymentService
     internal const long SegmentThreshold = 16L * 1024 * 1024;
     internal const int SegmentCount = 4;
     private static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(90);
+    // A source with another one after it gets less time to answer before the next is tried.
+    internal static TimeSpan FallbackResponseTimeout { get; set; } = TimeSpan.FromSeconds(20);
 
     private async Task<string> DownloadAsync(AppDefinition app, string workDir, IProgress<DeploymentEvent> events, IProgress<string> log, CancellationToken token)
     {
         var path = Path.Combine(workDir, app.Id + Path.GetExtension(new Uri(app.Url).AbsolutePath));
-        // Interrupted transfers resume inside FetchAsync; only a file that fails its check is fetched again.
-        for (var attempt = 1; ; attempt++)
+        var sources = Catalog.DownloadSources(app.Url);
+        for (var i = 0; ; i++)
         {
+            var last = i == sources.Count - 1;
             try
             {
-                await FetchAsync(app, path, events, log, token);
-                await VerifyFileAsync(path, app.Sha256, token);
+                await DownloadFromAsync(app, sources[i], path, last, events, log, token);
                 return path;
             }
             catch (Exception) when (token.IsCancellationRequested)
             {
                 throw new OperationCanceledException(token);
             }
-            catch (InvalidDataException ex) when (attempt < 2)
+            catch (Exception ex) when (!last)
+            {
+                log.Report($"{app.Name}: không tải được từ {new Uri(sources[i]).Host} ({ex.Message}); chuyển sang {new Uri(sources[i + 1]).Host}.");
+            }
+        }
+    }
+
+    // Interrupted transfers resume inside FetchAsync. A file that fails its check is fetched again from
+    // the same place only when no other source is left.
+    private async Task DownloadFromAsync(AppDefinition app, string url, string path, bool last, IProgress<DeploymentEvent> events, IProgress<string> log, CancellationToken token)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await FetchAsync(app, url, path, last ? StallTimeout : FallbackResponseTimeout, events, log, token);
+                await VerifyFileAsync(path, app.Sha256, token);
+                return;
+            }
+            catch (InvalidDataException ex) when (last && attempt < 2 && !token.IsCancellationRequested)
             {
                 log.Report($"{app.Name}: file tải về không hợp lệ ({ex.Message}); tải lại từ đầu.");
             }
@@ -256,17 +277,17 @@ public sealed class DeploymentService
 
     // The first request asks for "bytes=0-". A server without range support answers 200 with the whole
     // file, which is then read as before; a 206 gives the size, so the rest can be split and resumed.
-    private async Task FetchAsync(AppDefinition app, string path, IProgress<DeploymentEvent> events, IProgress<string> log, CancellationToken token)
+    private async Task FetchAsync(AppDefinition app, string url, string path, TimeSpan responseTimeout, IProgress<DeploymentEvent> events, IProgress<string> log, CancellationToken token)
     {
         var progress = new DownloadProgress(app.Id, events);
         HttpResponseMessage? first = null;
         try
         {
-            first = await GetRangeAsync(app.Url, 0, null, token);
+            first = await GetRangeAsync(url, 0, null, token, responseTimeout);
             var total = first.StatusCode == System.Net.HttpStatusCode.PartialContent ? TotalLength(first, 0) : null;
             if (total == null)
             {
-                await FetchWholeAsync(app, path, first, progress, log, token);
+                await FetchWholeAsync(app, url, path, first, progress, log, token);
                 first = null;
                 return;
             }
@@ -284,7 +305,7 @@ public sealed class DeploymentService
                 var response = i == 0 ? first : null;
                 segments[i] = Task.Run(async () =>
                 {
-                    try { await FetchSegmentAsync(app, path, start, end, response, progress, log, group.Token); }
+                    try { await FetchSegmentAsync(app, url, path, start, end, response, progress, log, group.Token); }
                     catch (Exception ex) { Interlocked.CompareExchange(ref cause, ex, null); group.Cancel(); throw; }
                 });
             }
@@ -299,7 +320,7 @@ public sealed class DeploymentService
 
     // One byte range; a dropped connection resumes from the last byte written. It gives up after three
     // attempts in a row that added nothing.
-    private async Task FetchSegmentAsync(AppDefinition app, string path, long start, long end, HttpResponseMessage? first,
+    private async Task FetchSegmentAsync(AppDefinition app, string url, string path, long start, long end, HttpResponseMessage? first,
         DownloadProgress progress, IProgress<string> log, CancellationToken token)
     {
         var position = start;
@@ -309,7 +330,7 @@ public sealed class DeploymentService
             var before = position;
             try
             {
-                using var response = first ?? await GetRangeAsync(app.Url, position, end, token);
+                using var response = first ?? await GetRangeAsync(url, position, end, token);
                 first = null;
                 if (response.StatusCode != System.Net.HttpStatusCode.PartialContent || response.Content.Headers.ContentRange?.From != position)
                     throw new IOException("Máy chủ không tải tiếp được từ vị trí đã dừng.");
@@ -330,13 +351,13 @@ public sealed class DeploymentService
     }
 
     // A server without range support: each retry starts the whole file again.
-    private async Task FetchWholeAsync(AppDefinition app, string path, HttpResponseMessage? first, DownloadProgress progress, IProgress<string> log, CancellationToken token)
+    private async Task FetchWholeAsync(AppDefinition app, string url, string path, HttpResponseMessage? first, DownloadProgress progress, IProgress<string> log, CancellationToken token)
     {
         for (var attempt = 1; ; attempt++)
         {
             try
             {
-                using var response = first ?? await GetRangeAsync(app.Url, null, null, token);
+                using var response = first ?? await GetRangeAsync(url, null, null, token);
                 first = null;
                 progress.Reset(response.Content.Headers.ContentLength);
                 long received = 0;
@@ -356,15 +377,16 @@ public sealed class DeploymentService
     }
 
     // from == null sends no Range header. Headers that never arrive count as a stall.
-    private async Task<HttpResponseMessage> GetRangeAsync(string url, long? from, long? to, CancellationToken token)
+    private async Task<HttpResponseMessage> GetRangeAsync(string url, long? from, long? to, CancellationToken token, TimeSpan? responseTimeout = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         if (from.HasValue) request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(from, to);
+        var timeout = responseTimeout ?? StallTimeout;
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
-        deadline.CancelAfter(StallTimeout);
+        deadline.CancelAfter(timeout);
         HttpResponseMessage response;
         try { response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token); }
-        catch (OperationCanceledException) when (!token.IsCancellationRequested) { throw new TimeoutException("Máy chủ không phản hồi trong 90 giây."); }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested) { throw new TimeoutException($"Máy chủ không phản hồi trong {timeout.TotalSeconds:0} giây."); }
         try
         {
             response.EnsureSuccessStatusCode();

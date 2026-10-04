@@ -4,7 +4,7 @@
     {
       "Id": "evkey",
       "Name": "EVKey",
-      "Url": "https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/EVKey.exe",
+      "Url": "https://dl.miniaz.io.vn/EVKey.exe",
       "Arguments": "-s",
       "Sha256": "",
       "Suite": "",
@@ -13,7 +13,7 @@
     {
       "Id": "chrome",
       "Name": "Google Chrome",
-      "Url": "https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/chrome.exe",
+      "Url": "https://dl.miniaz.io.vn/chrome.exe",
       "Arguments": "/silent /install",
       "Sha256": "",
       "Suite": ""
@@ -21,7 +21,7 @@
     {
       "Id": "klite",
       "Name": "K-Lite Codec Pack",
-      "Url": "https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/klite.exe",
+      "Url": "https://dl.miniaz.io.vn/klite.exe",
       "Arguments": "/verysilent /norestart /suppressmsgboxes",
       "Sha256": "",
       "Suite": ""
@@ -29,7 +29,7 @@
     {
       "Id": "telegram",
       "Name": "Telegram",
-      "Url": "https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/tele.exe",
+      "Url": "https://dl.miniaz.io.vn/tele.exe",
       "Arguments": "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES",
       "Sha256": "",
       "Suite": ""
@@ -37,7 +37,7 @@
     {
       "Id": "ultraview",
       "Name": "UltraViewer",
-      "Url": "https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/ultrav.exe",
+      "Url": "https://dl.miniaz.io.vn/ultrav.exe",
       "Arguments": "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES",
       "Sha256": "",
       "Suite": ""
@@ -45,7 +45,7 @@
     {
       "Id": "winrar",
       "Name": "WinRAR",
-      "Url": "https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/winrar.exe",
+      "Url": "https://dl.miniaz.io.vn/winrar.exe",
       "Arguments": "/S",
       "Sha256": "",
       "Suite": ""
@@ -53,7 +53,7 @@
     {
       "Id": "zalo",
       "Name": "Zalo",
-      "Url": "https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/zalo.exe",
+      "Url": "https://dl.miniaz.io.vn/zalo.exe",
       "Arguments": "/S",
       "Sha256": "",
       "Suite": ""
@@ -61,7 +61,7 @@
     {
       "Id": "zoom",
       "Name": "Zoom",
-      "Url": "https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/zoom.exe",
+      "Url": "https://dl.miniaz.io.vn/zoom.exe",
       "Arguments": "/silent",
       "Sha256": "",
       "Suite": ""
@@ -69,7 +69,7 @@
     {
       "Id": "office",
       "Name": "Office 2024",
-      "Url": "https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/OfficeSetup.exe",
+      "Url": "https://dl.miniaz.io.vn/OfficeSetup.exe",
       "Arguments": "",
       "Sha256": "",
       "Suite": "Office"
@@ -77,7 +77,7 @@
     {
       "Id": "wps",
       "Name": "WPS Office",
-      "Url": "https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/wps.exe",
+      "Url": "https://dl.miniaz.io.vn/wps.exe",
       "Arguments": "/S",
       "Sha256": "",
       "Suite": "WPS"
@@ -101,7 +101,7 @@
     {
       "Id": "vc64",
       "Name": "Visual C\u002B\u002B x64",
-      "Url": "https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/VC_redist.x64.exe",
+      "Url": "https://dl.miniaz.io.vn/VC_redist.x64.exe",
       "Arguments": "/install /quiet /norestart",
       "Sha256": "",
       "Suite": ""
@@ -109,7 +109,7 @@
     {
       "Id": "vc86",
       "Name": "Visual C\u002B\u002B x86",
-      "Url": "https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev/VC_redist.x86.exe",
+      "Url": "https://dl.miniaz.io.vn/VC_redist.x86.exe",
       "Arguments": "/install /quiet /norestart",
       "Sha256": "",
       "Suite": ""

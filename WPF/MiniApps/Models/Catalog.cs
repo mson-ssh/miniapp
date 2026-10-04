@@ -59,7 +59,23 @@ public sealed class WindowsOption(WindowsSettingDefinition definition) : Observa
 
 public static class Catalog
 {
+    // One R2 bucket, served first through the cached custom domain. The bucket's r2.dev address and a
+    // GitHub release holding the same file names are fallbacks for the same files.
+    public const string Primary = "https://dl.miniaz.io.vn";
     public const string R2 = "https://pub-50d6cf4af6964541b0621bbc9bc26690.r2.dev";
+    public const string GitHubMirror = "https://github.com/mson-ssh/miniapp/releases/download/installers";
+    // Sources to try in order. A URL on either bucket address gets all three, so configs saved with
+    // the r2.dev address use the custom domain too; any other URL is used as it is.
+    public static IReadOnlyList<string> DownloadSources(string url)
+    {
+        foreach (var host in new[] { Primary, R2 })
+        {
+            if (!url.StartsWith(host + "/", StringComparison.OrdinalIgnoreCase)) continue;
+            var path = url.Substring(host.Length);
+            return [Primary + path, R2 + path, GitHubMirror + "/" + Path.GetFileName(new Uri(url).AbsolutePath)];
+        }
+        return [url];
+    }
     public static List<AppDefinition> Defaults() =>
     [
         Make("evkey", "EVKey", "EVKey.exe", "-s", waitInstallerOnly: true),
@@ -85,7 +101,7 @@ public static class Catalog
         Make("vc86", "Visual C++ x86", "VC_redist.x86.exe", "/install /quiet /norestart")
     ];
     private static AppDefinition Make(string id, string name, string file, string args, string suite = "", bool waitInstallerOnly = false) => new()
-    { Id = id, Name = name, Url = $"{R2}/{file}", Arguments = args, Suite = suite, WaitInstallerOnly = waitInstallerOnly };
+    { Id = id, Name = name, Url = $"{Primary}/{file}", Arguments = args, Suite = suite, WaitInstallerOnly = waitInstallerOnly };
     public static void Validate(IEnumerable<AppDefinition> apps)
     {
         var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
