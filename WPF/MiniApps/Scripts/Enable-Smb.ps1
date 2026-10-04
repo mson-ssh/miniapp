@@ -22,7 +22,8 @@ Invoke-Step 'Cho phép vào thư mục share không mật khẩu (guest)' {
     Set-SmbClientConfiguration -EnableInsecureGuestLogons $true -Force
     # 24H2 also enforces this through policy; the policy value is what Windows reads first.
     $policy = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation'
-    New-Item -Path $policy -Force | Out-Null
+    # Only when missing: New-Item -Force on an existing key deletes the other policy values in it.
+    if (-not (Test-Path -LiteralPath $policy)) { New-Item -Path $policy -Force | Out-Null }
     New-ItemProperty -Path $policy -Name AllowInsecureGuestAuth -PropertyType DWord -Value 1 -Force | Out-Null
 }
 Invoke-Step 'Không bắt buộc ký SMB khi kết nối tới thiết bị khác' {
