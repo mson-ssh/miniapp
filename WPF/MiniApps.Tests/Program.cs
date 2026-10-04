@@ -172,7 +172,11 @@ try
     });
     Check("EXTEND lists the add-ons supported by its target", () => {
         var vm = new MainViewModel(true);
-        Assert(vm.Extensions.Select(e => e.Id).SequenceEqual(new[] { "cpp", "sharelan", "clean" }));
+        Assert(vm.Extensions.Select(e => e.Id).SequenceEqual(new[] { "cpp", "sharelan", "clean", "removeoffice" }));
+        // Cards carry one short line; the details stay in the confirmation.
+        Assert(vm.Extensions.All(e => e.Description.Length <= 60));
+        // Each action button shows a distinct icon instead of its text.
+        Assert(vm.Extensions.All(e => e.Icon.Length > 0) && vm.Extensions.Select(e => e.Icon).Distinct().Count() == vm.Extensions.Count);
         Assert(vm.Extensions.All(e => e.Name.Length > 0 && e.Description.Length > 0 && e.Status == "Sẵn sàng"));
         Assert(vm.Extensions.Where(e => !e.Interactive).All(e => e.ConfirmText.Length > 0) && vm.Extensions.Single(e => e.Interactive).Id == "sharelan");
         Assert(vm.Extensions.All(e => vm.RunExtensionCommand.CanExecute(e) && !vm.OpenExtensionLogCommand.CanExecute(e)));
@@ -195,6 +199,9 @@ try
         Assert(lines.SequenceEqual(new[] { "dòng thử" }));
         Assert(result.LogPath.StartsWith(ExtensionService.LogDirectory) && File.ReadAllText(result.LogPath).Contains("dòng thử") &&
             File.ReadAllText(result.LogPath).Contains("Kết thúc với mã 3."));
+        // Gỡ Office on EXTEND runs the same embedded script as the install-time Windows task.
+        Assert(ExtensionService.ScriptsFor("removeoffice").SequenceEqual(new[] { "Remove-Office.ps1" }) &&
+            typeof(ExtensionService).Assembly.GetManifestResourceStream("MiniApps.Scripts.Remove-Office.ps1") != null);
         Reject(() => ExtensionService.ScriptsFor("debloat"));
         Reject(() => ExtensionService.ScriptsFor("unknown"));
     });

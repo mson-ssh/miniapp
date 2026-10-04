@@ -6,6 +6,10 @@ Theo yêu cầu người dùng: bucket R2 có tên miền riêng `dl.miniaz.io.v
 
 Sửa icon OneDrive ngoài Desktop: script "Hiện biểu tượng Desktop" dùng `New-Item -Force` trên key `HideDesktopIcons\NewStartPanel` đã có, xóa mất giá trị ẩn `{018D5C66…}=1` OneDrive tự ghi khi tạo profile. Nay chỉ tạo key khi thiếu và đặt lại OneDrive = 1. Cùng lỗi trong `Enable-Smb.ps1` (key `Policies\…\LanmanWorkstation`) đã sửa. Test net48 98 logic PASS + WPF; chưa chạy thật trên registry/cài đặt.
 
+## EXTEND: thêm Gỡ Office, thẻ gọn, nút biểu tượng — 2026-10-04, đã push main (chưa phát hành)
+
+Theo yêu cầu người dùng: EXTEND có thêm thẻ "Gỡ Office" (id `removeoffice`), chạy ẩn `Remove-Office.ps1` nhúng sẵn (cùng script tác vụ "Gỡ Microsoft Office" khi chọn WPS/OnlyOffice/LibreOffice) qua ExtensionService, có xác nhận (đóng Office đang mở, nên khởi động lại), dùng chung khóa cài đặt, có nhật ký. Thẻ EXTEND gọn lại: padding 18×11, tên 15 + trạng thái cùng dòng, mô tả một dòng ngắn (≤ 60 ký tự, có test); nút chạy chỉ có biểu tượng nét SVG 36×36 kiểu nút cài riêng (tải xuống = Cài đặt, mũi tên ra = Mở, chổi = Dọn dẹp, thùng rác = Gỡ), không chữ/tooltip, tên hành động vẫn đặt cho trình đọc màn hình; hộp xác nhận giữ nguyên nội dung chi tiết. Test net48 98 logic PASS + WPF (trên nền ee1c3f1); đã xem render EXTEND. Chưa chạy thật Gỡ Office từ EXTEND.
+
 ## Phát hành v0.4.6 — 2026-10-03
 
 Theo yêu cầu người dùng (chỉ net48): `Publish.ps1 -Target net48 -Version 0.4.6`, `gh release create v0.4.6` (target e5a71106fac1e0243de48b099616e0c1bb55958e), thêm logo lưới ứng dụng (mục bên dưới). ZIP net48 557647 bytes, SHA-256 `65b58faeb29666304af5a98d5c47cfc8203d98f6cd8116e7fcc7a466134936f0`; net10 vẫn là bản v0.3.6 dùng lại nguyên byte (63080335 bytes, `e1cbb8c3…f515`). Trước upload: test net48 96 logic PASS + WPF; giải nén, ProductVersion 0.4.6+e5a7110, `--validate-config` và `--preview --startup-smoke-test` thoát 0, exe trong ZIP mang icon mới. Sau upload: tải lại 5 asset đều 200, trùng byte. Bootstrap chuyển sang v0.4.6; Test-Bootstrap 8/8.

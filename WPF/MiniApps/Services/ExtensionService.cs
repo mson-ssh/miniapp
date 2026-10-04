@@ -18,6 +18,7 @@ public sealed class ExtensionService(Func<string, string, IProgress<string>, Tas
     {
         "cpp" => ["Install-CppEnvironment.ps1", "Update-Winget.ps1"],
         "sharelan" => ["Share-LAN.ps1"],
+        "removeoffice" => ["Remove-Office.ps1"],
         _ => throw new ArgumentException("Phần mở rộng không được hỗ trợ: " + extensionId, nameof(extensionId))
     };
 

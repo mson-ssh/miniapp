@@ -31,7 +31,17 @@ public sealed class ExtensionItem(string id, string name, string description, st
     public string Id { get; } = id;
     public string Name { get; } = name;
     public string Description { get; } = description;
+    // The action's name, read by screen readers; the button itself shows only its icon.
     public string ActionText { get; } = actionText;
+    // Line icons on a 20×20 grid, drawn as strokes.
+    public string Icon => ActionText switch
+    {
+        "Cài đặt" => "M 10,2 L 10,13 M 5,8.5 L 10,13.5 L 15,8.5 M 3,17.5 L 17,17.5",
+        "Mở" => "M 11,3 L 17,3 L 17,9 M 17,3 L 9,11 M 15,12.5 L 15,17 L 3,17 L 3,5 L 7.5,5",
+        "Dọn dẹp" => "M 17,2 L 11.5,8.5 M 9,7.5 L 13.5,11.5 L 10.5,18 L 2.5,14 Z M 5.5,15.5 L 8,11.5 M 8.5,17 L 10.5,13",
+        "Gỡ" => "M 3,5.5 L 17,5.5 M 8,5.5 L 8,3 L 12,3 L 12,5.5 M 5,5.5 L 6,17.5 L 14,17.5 L 15,5.5 M 8.5,9 L 8.5,14.5 M 11.5,9 L 11.5,14.5",
+        _ => ""
+    };
     public string ConfirmText { get; } = confirmText;
     private string status = "Sẵn sàng";
     public string Status { get => status; set => Set(ref status, value); }
@@ -126,20 +136,14 @@ public sealed class MainViewModel : Observable
     // Optional add-ons on the EXTEND page, each run on its own after the technician confirms.
     public IReadOnlyList<ExtensionItem> Extensions { get; } =
     [
-        new("cpp", "Môi trường C++",
-            "VS Code, MSYS2, bộ biên dịch MinGW-w64 (gcc, g++, gdb) và extension C/C++; thêm bộ biên dịch vào PATH của máy.",
-            "Cài đặt",
+        new("cpp", "Môi trường C++", "VS Code, MinGW-w64 (gcc, g++, gdb) và extension C/C++.", "Cài đặt",
             "Cài môi trường C/C++?\n\n" +
             "• VS Code, MSYS2 và bộ biên dịch MinGW-w64 (UCRT64).\n" +
             "• Thêm C:\\msys64\\ucrt64\\bin vào PATH của máy.\n" +
             "• Cài extension C/C++ cho VS Code.\n\n" +
             "Tải khoảng 2 GB, có thể mất 10–30 phút. Phần đã có trên máy sẽ được bỏ qua."),
-        new("sharelan", "Share LAN",
-            "Chia sẻ ổ đĩa/thư mục qua mạng LAN không cần mật khẩu, kết nối tới máy đang chia sẻ, quản lý hoặc chẩn đoán. Mở trong cửa sổ PowerShell riêng.",
-            "Mở", "", interactive: true),
-        new("clean", "CLEAN",
-            "Dọn file tạm của Windows, danh sách Recent, lịch sử và cache trình duyệt của tài khoản Windows hiện tại.",
-            "Dọn dẹp",
+        new("sharelan", "Share LAN", "Chia sẻ và kết nối thư mục qua mạng LAN.", "Mở", "", interactive: true),
+        new("clean", "CLEAN", "Dọn file tạm, Recent và cache trình duyệt.", "Dọn dẹp",
             "Chạy CLEAN cho tài khoản " + Environment.UserName + "?\n\n" +
             "• Xóa file trong %TEMP% và C:\\Windows\\Temp.\n" +
             "• Xóa Recent của Windows: file gần đây, jump list, lịch sử Run, thanh địa chỉ và tìm kiếm Explorer, hộp Mở/Lưu. Giữ thư mục ghim Quick access.\n" +
@@ -149,6 +153,10 @@ public sealed class MainViewModel : Observable
             "• File đang dùng, liên kết thư mục và thư mục backup được giữ lại.\n\n" +
             "Dữ liệu đã xóa không vào Thùng rác. Chỉ dọn dữ liệu cục bộ; đồng bộ có thể đưa lịch sử trở lại.\n" +
             "Hỗ trợ profile chuẩn Chrome, Edge, Cốc Cốc, Brave, Opera, Vivaldi, Chromium và Firefox; không tự quét profile portable/vị trí tùy chỉnh ngoài tài khoản này."),
+        new("removeoffice", "Gỡ Office", "Gỡ Microsoft Office đang có trên máy.", "Gỡ",
+            "Gỡ Microsoft Office trên máy?\n\n" +
+            "• Word, Excel, Outlook… đang mở sẽ bị đóng. Hãy lưu tài liệu trước.\n" +
+            "• Dùng Office Tool Plus, có thể mất vài phút. Nên khởi động lại máy sau khi gỡ."),
     ];
     public RelayCommand<ExtensionItem> RunExtensionCommand { get; }
     public RelayCommand<ExtensionItem> OpenExtensionLogCommand { get; }
