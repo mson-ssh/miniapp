@@ -119,7 +119,7 @@ public sealed class DeploymentService
                     "-PassThru -ErrorAction Stop; $null = $p.Handle; $p.WaitForExit(); " +
                     "if ($null -eq $p.ExitCode) { throw 'Installer returned no exit code' }; exit $p.ExitCode";
                 int code = 1618;
-                for (var attempt = 0; attempt <= 3; attempt++)
+                for (var attempt = 0; attempt <= InstallerBusyRetries; attempt++)
                 {
                     token.ThrowIfCancellationRequested();
                     if (isMsi) await msiInstallSlot.WaitAsync(token);
@@ -135,11 +135,13 @@ public sealed class DeploymentService
                     {
                         if (isMsi) msiInstallSlot.Release();
                     }
-                    if (code != 1618 || attempt == 3) break;
+                    if (code != 1618 || attempt == InstallerBusyRetries) break;
                     token.ThrowIfCancellationRequested();
-                    var delay = TimeSpan.FromSeconds((attempt + 1) * 5);
+                    // Installers run side by side, so another one (or an EXE that wraps an MSI, such as
+                    // VC++) may hold Windows Installer for minutes; wait it out instead of failing.
+                    var delay = TimeSpan.FromSeconds(Math.Min((attempt + 1) * 5, 30));
                     events.Report(new(app.Id, $"Chờ cài đặt · Windows Installer đang bận · thử lại sau {delay.TotalSeconds:0} giây", 100));
-                    log.Report($"{app.Name}: bộ cài trả mã 1618; thử lại lần {attempt + 1}/3 sau {delay.TotalSeconds:0} giây.");
+                    log.Report($"{app.Name}: bộ cài trả mã 1618; thử lại lần {attempt + 1}/{InstallerBusyRetries} sau {delay.TotalSeconds:0} giây.");
                     await this.delay(delay, token);
                 }
                 if (code != 0 && code != 3010 && code != 1641)
@@ -210,6 +212,9 @@ public sealed class DeploymentService
             catch { }
         }
     }
+
+    // Windows Installer busy (1618): this many retries, 5 s apart and growing to 30 s, about four minutes in all.
+    internal const int InstallerBusyRetries = 10;
 
     // Tests point this at a temporary folder so they leave no logs on the machine.
     internal static string InstallLogDirectory { get; set; } =

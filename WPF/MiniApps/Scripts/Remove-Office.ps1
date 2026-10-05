@@ -57,7 +57,9 @@ try {
     foreach ($url in $Urls) {
         try {
             Write-Output "Đang tải Office Tool Plus từ $url ..."
-            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -TimeoutSec 600
+            # A source with another after it gets 60 seconds to answer; the last one keeps 10 minutes.
+            $timeout = if ($url -eq $Urls[-1]) { 600 } else { 60 }
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -TimeoutSec $timeout
             $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
             if ($actual -ne $Sha256) { throw "SHA-256 không khớp (nhận $actual)" }
             $downloaded = $true

@@ -44,7 +44,7 @@ public static class WindowsSettingsCatalog
         Make("Smb", "SMB chia sẻ mạng", "Vào được NAS, máy in, thư mục share (kể cả không mật khẩu và thiết bị cũ, bật SMB1 client); bật dò tìm mạng và chia sẻ file trên mạng Private. Có thể cần khởi động lại."),
         Make("Disk", "Chia ổ đĩa", "Chia ổ hệ thống theo dung lượng: 256 GB thêm D: 50 GB; 512 GB thêm D: 200 GB; 1 TB thêm D: 400 GB và E: 200 GB. Bỏ qua ổ trên 1100 GB hoặc máy đã có D:/E:. Tắt BitLocker và Hibernate trên C: trước khi chia."),
         Make("ExecutionPolicy", "Execution Policy: Bypass", "Cho phép chạy mọi script PowerShell trên máy (phạm vi LocalMachine), không chặn hay hỏi xác nhận."),
-        Make("Win11Debloat", "Debloatware Windows", "Win11Debloat 2026.08.24 ở chế độ mặc định: tạo điểm khôi phục, gỡ ứng dụng cài sẵn, tắt quảng cáo, gợi ý, Copilot, Recall và Widgets, khởi động lại Explorer. Có thể mất 5–15 phút.")
+        Make("Win11Debloat", "Debloatware Windows", "Win11Debloat 2026.08.24 ở chế độ mặc định, không tạo điểm khôi phục: gỡ ứng dụng cài sẵn, tắt quảng cáo, gợi ý, Copilot, Recall và Widgets, khởi động lại Explorer. Có thể mất vài phút.")
     ];
     // Not a configured setting: added to the run when another office suite replaces Microsoft Office.
     public static WindowsSettingDefinition RemoveOffice() =>

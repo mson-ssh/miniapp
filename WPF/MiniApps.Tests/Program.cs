@@ -402,6 +402,18 @@ try
         var debloat = WindowsSettingsCatalog.Defaults().Single(s => s.Id == "Win11Debloat");
         Assert(debloat.Action == "Win11Debloat" && debloat.Name == "Debloatware Windows" && !MainViewModel.IsDebloat(debloat));
         Assert(debloat.Script.Contains("'-RunDefaults', '-Silent'") && debloat.Script.Contains("00D1487B2E9B9691653774CC781ED3844E4B2FD5B0D91C32F6F78AA8C7892BD4"));
+        // No restore point: turned off in Win11Debloat's DefaultSettings.json before it runs; nothing else changes.
+        var restore = debloat.Script.IndexOf("$restorePoint[0].Value = $false", StringComparison.Ordinal);
+        Assert(restore > debloat.Script.IndexOf("Get-FileHash", StringComparison.Ordinal) && restore < debloat.Script.IndexOf("& $powershell @arguments", StringComparison.Ordinal));
+        Assert(!debloat.Script.Contains("SkipRegistryBackup") && debloat.Description.Contains("không tạo điểm khôi phục"));
+    });
+    Check("Packaged settings carry the same scripts and descriptions as the built-in ones", () => {
+        var packaged = new SettingsStore(Path.GetFullPath("ReleaseConfig")).LoadWindows(required: true);
+        foreach (var builtIn in WindowsSettingsCatalog.Defaults())
+        {
+            var copy = packaged.Single(s => s.Id == builtIn.Id);
+            Assert(copy.Script.Replace("\r\n", "\n") == builtIn.Script.Replace("\r\n", "\n") && copy.Description == builtIn.Description);
+        }
     });
     Check("One-click install includes the whole catalog", () => { var vm = new MainViewModel(true); Assert(vm.IsReady && !vm.HasStarted && vm.Apps.Count == 10 && vm.InstallCommand.CanExecute(null)); Assert(typeof(AppRow).GetProperty("Selected") == null); });
     Check("Ready list offers every catalog app for a single install", () => {
@@ -614,7 +626,8 @@ try
                 (duration, token) => { waits.Add(duration.TotalSeconds); if (mode == "cancel") cancel.Cancel(); token.ThrowIfCancellationRequested(); return Task.CompletedTask; });
             service.RunAsync(Catalog.Defaults().Take(1).ToArray(), [], Path.Combine(root, mode), new InlineProgress<DeploymentEvent>(outcomes.Add), new InlineProgress<string>(_ => { }), cancel.Token).GetAwaiter().GetResult();
             if (mode == "recover") Assert(calls == 2 && waits.SequenceEqual(new[] { 5d }) && outcomes.Last().Finished && !outcomes.Last().Failed);
-            if (mode == "exhaust") Assert(calls == 4 && waits.SequenceEqual(new[] { 5d, 10d, 15d }) && outcomes.Last().Failed);
+            // Side-by-side installers may hold Windows Installer for minutes: about four minutes of retries, 30 s apart at most.
+            if (mode == "exhaust") Assert(calls == DeploymentService.InstallerBusyRetries + 1 && waits.SequenceEqual(new[] { 5d, 10d, 15d, 20d, 25d, 30d, 30d, 30d, 30d, 30d }) && outcomes.Last().Failed);
             if (mode == "cancel") Assert(calls == 1 && outcomes.Last().Status == "Đã hủy");
         }
     });

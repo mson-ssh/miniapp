@@ -2,8 +2,10 @@
 # rules of the CLI's $DiskScript in Setup.ps1 (formerly config/disk.ps1):
 #
 #   - C: is relabelled "OS" (label only, no formatting).
-#   - BitLocker on C: is decrypted first; it pins files at the end of the volume and blocks
-#     shrinking. The wait is capped at 60 minutes.
+#   - BitLocker on C: is always decrypted first; it pins files at the end of the volume and
+#     blocks shrinking. The wait is capped at 60 minutes.
+#     (Shrinking with BitLocker kept on was considered on 2026-10-05 and left out: no official
+#     Microsoft statement that it is supported, mixed field reports, and no test machine.)
 #   - The disk holding C: is classed by size and split with .1 GB padding, so This PC shows
 #     round numbers after NTFS overhead:
 #         200-300 GB   -> D: "LOCAL I" 50.1 GB

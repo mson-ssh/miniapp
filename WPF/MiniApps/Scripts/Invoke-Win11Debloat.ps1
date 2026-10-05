@@ -1,4 +1,5 @@
 ﻿# MiniApps Windows setting "Debloatware Windows": run Win11Debloat (https://github.com/Raphire/Win11Debloat) in its default mode.
+# The one change to that mode: no system restore point, to save time. Its registry backups stay.
 #
 # Pinned to one release and checked by SHA-256, so every machine runs the same reviewed code.
 # To move to a newer release, change $Version and $Sha256 together.
@@ -80,6 +81,18 @@ else {
     Write-Output "Dùng Win11Debloat $Version đã có tại $target."
 }
 
+# -RunDefaults takes its settings from Config\DefaultSettings.json and has no switch to leave one
+# out, so the restore point is turned off there. Done on every run: the folder is reused.
+$defaults = Join-Path $target 'Config\DefaultSettings.json'
+$settings = [IO.File]::ReadAllText($defaults) | ConvertFrom-Json
+$restorePoint = @($settings.Settings | Where-Object Name -eq 'CreateRestorePoint')
+if ($restorePoint.Count -ne 1) { throw 'DefaultSettings.json của Win11Debloat không có đúng một mục CreateRestorePoint.' }
+if ($restorePoint[0].Value -ne $false) {
+    $restorePoint[0].Value = $false
+    [IO.File]::WriteAllText($defaults, ($settings | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding $false))
+}
+Write-Output 'Bỏ qua tạo điểm khôi phục hệ thống; vẫn giữ bản sao lưu registry của Win11Debloat.'
+
 $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 # Win11Debloat needs Windows PowerShell 5.1, hence powershell.exe by full path. It is run as a
 # child process because it ends with Exit, which would otherwise end this script as well.
@@ -89,7 +102,7 @@ if ($DryRun) {
     exit 0
 }
 
-Write-Output 'Đang chạy Win11Debloat ở chế độ mặc định. Có thể mất 5-15 phút; Explorer sẽ khởi động lại.'
+Write-Output 'Đang chạy Win11Debloat ở chế độ mặc định (không tạo điểm khôi phục). Có thể mất vài phút; Explorer sẽ khởi động lại.'
 # Windows PowerShell 5.1 turns every stderr line of a native command into a terminating error
 # under 'Stop'; Win11Debloat reports failed app removals that way and must be allowed to finish.
 $ErrorActionPreference = 'Continue'

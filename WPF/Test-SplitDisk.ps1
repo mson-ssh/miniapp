@@ -73,4 +73,6 @@ Assert-Case (Invoke-Case '1 TB class: D: 400.1 GB then E: 200.1 GB' @{ Disk = 95
     'label C=OS', 'powercfg /h off', 'resize C=349.8', 'new 2 400.1', "format 2 NTFS 'LOCAL I'", 'letter 2=D', 'new 3 max', "format 3 NTFS 'LOCAL II'", 'letter 3=E')
 Assert-Case (Invoke-Case 'BitLocker is decrypted before the shrink' @{ Disk = 238.5 * $GB; C = 237 * $GB; BitLocker = 'FullyEncrypted' }) $false 'Đã tắt BitLocker' @(
     'label C=OS', 'bitlocker off', 'manage-bde -off C:', 'powercfg /h off', 'resize C=186.9', 'new 2 max', "format 2 NTFS 'LOCAL I'", 'letter 2=D')
+Assert-Case (Invoke-Case 'encryption still in progress is decrypted before the shrink' @{ Disk = 238.5 * $GB; C = 237 * $GB; BitLocker = 'EncryptionInProgress' }) $false 'Đã tắt BitLocker' @(
+    'label C=OS', 'bitlocker off', 'manage-bde -off C:', 'powercfg /h off', 'resize C=186.9', 'new 2 max', "format 2 NTFS 'LOCAL I'", 'letter 2=D')
 Write-Host 'PASS Split-Disk follows the CLI partitioning rules.'
