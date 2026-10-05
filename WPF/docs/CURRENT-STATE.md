@@ -1,6 +1,10 @@
 # Trạng thái bàn giao
 
-## Tăng tốc luồng cài — 2026-10-05, local (chưa commit, chưa phát hành)
+## Phát hành v0.4.8 — 2026-10-05
+
+Theo yêu cầu người dùng (chỉ net48): `Publish.ps1 -Target net48 -Version 0.4.8`, `gh release create v0.4.8` (target 617fd293f7742e0876d688a6d170edc6bd598fd3), gồm các thay đổi "Tăng tốc luồng cài" bên dưới. ZIP net48 560880 bytes, SHA-256 `2494cb9d3f01395f71c3d8c6e80593f0c2a35d941c4febaf6cff32a00a377179`; net10 vẫn là bản v0.3.6 dùng lại nguyên byte (63080335 bytes, `e1cbb8c3…f515`). Trước upload: test net48 99 logic PASS + WPF, Test-SplitDisk 12/12; giải nén, ProductVersion 0.4.8+617fd29, `--validate-config --config-root` và `--preview --startup-smoke-test` thoát 0, ReleaseConfig trong gói trùng repo. Sau upload: tải lại 5 asset đều 200, trùng byte. Bootstrap chuyển sang v0.4.8; Test-Bootstrap 8/8. Chưa chạy thật cài đặt, Debloat hay chia ổ bằng bản này.
+
+## Tăng tốc luồng cài — 2026-10-05, commit 617fd29, phát hành trong v0.4.8
 
 Theo yêu cầu người dùng (ưu tiên tốc độ, chấp nhận rủi ro thấp; gỡ Office và cài bộ văn phòng mới vẫn chạy song song):
 - Debloat không tạo điểm khôi phục: `Invoke-Win11Debloat.ps1` đặt `CreateRestorePoint=false` trong `Config\DefaultSettings.json` của Win11Debloat sau khi kiểm SHA-256, mỗi lượt chạy (thư mục được dùng lại); 16 thiết lập mặc định khác và bản sao lưu registry giữ nguyên. Đã thử trên bản sao config: `Import-JsonFile` của Win11Debloat đọc được, chạy hai lần vẫn đúng.
